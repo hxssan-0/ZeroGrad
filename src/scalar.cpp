@@ -1,4 +1,5 @@
 #include <zerograd/scalar.h>
+#include <cmath>
 
 namespace zerograd
 {
@@ -80,6 +81,56 @@ namespace zerograd
     {
         auto left_obj = std::make_shared<Scalar>(left);
         return left_obj * right;
+    }
+
+    std::shared_ptr<Scalar> operator-(const std::shared_ptr<Scalar>& scalar)
+    {
+        return scalar * -1.0f;
+    }
+
+    std::shared_ptr<Scalar> operator-(const std::shared_ptr<Scalar>& left, const std::shared_ptr<Scalar>& right)
+    {
+        return left + (-right);
+    }
+
+    std::shared_ptr<Scalar> operator-(const std::shared_ptr<Scalar>& left, float right)
+    {
+        return left + (-right);
+    }
+
+    std::shared_ptr<Scalar> operator-(float left, const std::shared_ptr<Scalar>& right)
+    {
+        return left + (-right);
+    }
+
+    std::shared_ptr<Scalar> pow(const std::shared_ptr<Scalar>& scalar, float exponent)
+    {
+        auto result = std::make_shared<Scalar>(
+            std::pow(scalar->data, exponent),
+            std::vector<std::shared_ptr<Scalar>>{scalar},
+            "^" + std::to_string(exponent)
+        );
+
+        result->_backward = [scalar, exponent, out = result.get()]() {
+            scalar->grad += exponent * (std::pow(scalar->data, exponent - 1)) * out->grad;
+        };
+
+        return result;
+    }
+
+    std::shared_ptr<Scalar> operator/(const std::shared_ptr<Scalar>& left, const std::shared_ptr<Scalar>& right)
+    {
+        return left * pow(right, -1.0f);
+    }
+
+    std::shared_ptr<Scalar> operator/(const std::shared_ptr<Scalar>& left, float right)
+    {
+        return left * (1.0f / right);
+    }
+
+    std::shared_ptr<Scalar> operator/(float left, const std::shared_ptr<Scalar>& right)
+    {
+        return left * pow(right, -1.0f);
     }
 
     std::ostream& operator<<(std::ostream& out, const std::shared_ptr<Scalar>& scalar)
