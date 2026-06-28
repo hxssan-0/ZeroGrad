@@ -6,15 +6,23 @@
 #include <functional>
 #include <memory>
 #include <utility>
+#include <unordered_set>
 
 namespace zerograd
 {
-    class Scalar 
+    class Scalar : public std::enable_shared_from_this<Scalar>
     {
     private:
         std::vector<std::shared_ptr<Scalar>> _children;
         std::string _op;
         std::function<void()> _backward = [](){};
+
+        static void build_topo(
+            const std::shared_ptr<Scalar>& node,
+            std::vector<std::shared_ptr<Scalar>>& topo,
+            std::unordered_set<std::shared_ptr<Scalar>>& visited
+        );
+
     public:
         float data{};
         float grad{};
@@ -53,6 +61,8 @@ namespace zerograd
         // activation functions
         friend std::shared_ptr<Scalar> tanh(const std::shared_ptr<Scalar>& scalar);
         friend std::shared_ptr<Scalar> relu(const std::shared_ptr<Scalar>& scalar);
+
+        void backward();
 
         friend std::ostream& operator<<(std::ostream& out, const std::shared_ptr<Scalar>& scalar);
     };

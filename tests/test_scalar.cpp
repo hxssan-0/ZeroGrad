@@ -247,3 +247,52 @@ TEST_CASE("Scalar ReLU", "[scalar]") {
 
     REQUIRE(b_zero->data == Catch::Approx(0.0f));
 }
+
+TEST_CASE("Engine Integration - Simple Expression", "[autograd]") {
+    auto a = std::make_shared<zerograd::Scalar>(2.0f);
+    auto b = std::make_shared<zerograd::Scalar>(-3.0f);
+    auto c = std::make_shared<zerograd::Scalar>(10.0f);
+
+    // y = a + b * c
+    auto e = b * c;
+    auto y = a + e;
+
+    y->backward();
+
+    // forward pass
+    REQUIRE(y->data == Catch::Approx(-28.0f));
+
+    // backward pass
+    REQUIRE(a->grad == Catch::Approx(1.0f));
+    REQUIRE(b->grad == Catch::Approx(10.0f));
+    REQUIRE(c->grad == Catch::Approx(-3.0f));
+}
+
+TEST_CASE("Engine Integration - A Simple Neuron", "[autograd]") {
+    auto x1 = std::make_shared<zerograd::Scalar>(2.0f);
+    auto w1 = std::make_shared<zerograd::Scalar>(-3.0f);
+    
+    auto x2 = std::make_shared<zerograd::Scalar>(0.0f);
+    auto w2 = std::make_shared<zerograd::Scalar>(1.0f);
+    
+    auto b  = std::make_shared<zerograd::Scalar>(6.8813735870195432f);
+
+    // x1*w1 + x2*w2 + b
+    auto x1w1 = x1 * w1;
+    auto x2w2 = x2 * w2;
+    auto x1w1x2w2 = x1w1 + x2w2;
+    auto n = x1w1x2w2 + b;
+    
+    auto o = tanh(n);
+
+    o->backward();
+
+    // forward pass
+    REQUIRE(o->data == Catch::Approx(0.7071f).margin(0.01f));
+
+    // backward pass
+    REQUIRE(x1->grad == Catch::Approx(-1.5f).margin(0.01f));
+    REQUIRE(w1->grad == Catch::Approx(1.0f).margin(0.01f));
+    REQUIRE(x2->grad == Catch::Approx(0.5f).margin(0.01f));
+    REQUIRE(w2->grad == Catch::Approx(0.0f).margin(0.01f));
+}

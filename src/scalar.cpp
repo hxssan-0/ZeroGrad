@@ -176,6 +176,35 @@ namespace zerograd
         return result;
     }
 
+    void Scalar::build_topo(
+            const std::shared_ptr<Scalar>& node,
+            std::vector<std::shared_ptr<Scalar>>& topo,
+            std::unordered_set<std::shared_ptr<Scalar>>& visited
+        )
+    {
+        if (visited.contains(node))
+            return;
+
+        visited.insert(node);
+        for (const std::shared_ptr<Scalar>& child : node->_children) {
+            build_topo(child, topo, visited);
+        }
+        topo.push_back(node);
+    }
+
+    void Scalar::backward()
+    {
+        std::vector<std::shared_ptr<Scalar>> topo;
+        std::unordered_set<std::shared_ptr<Scalar>> visited;
+
+        build_topo(shared_from_this(), topo, visited);
+
+        this->grad = 1.0f;
+        for (auto it = topo.rbegin(); it != topo.rend(); ++it) {
+            (*it)->_backward();
+        }
+    }
+
     std::ostream& operator<<(std::ostream& out, const std::shared_ptr<Scalar>& scalar)
     {
         if (!scalar)
