@@ -2,6 +2,33 @@
 #include <catch2/catch_approx.hpp>
 #include <zerograd/scalar.h>
 #include <cmath>
+#include <functional>
+
+float compute_numerical_gradient(
+    const std::function<std::shared_ptr<zerograd::Scalar>()>& compute_graph, 
+    const std::shared_ptr<zerograd::Scalar>& target_node, 
+    float h = 1e-3f
+)
+{
+    // saving the original data
+    float original_data = target_node->data;
+
+    // f(x + h)
+    target_node->data = original_data + h;
+    auto out_plus = compute_graph();
+    float f_x_plus_h = out_plus->data;
+
+    // f(x - h)
+    target_node->data = original_data - h;
+    auto out_minus = compute_graph();
+    float f_x_minus_h = out_minus->data;
+
+    // restoring the original data
+    target_node->data = original_data;
+
+    // (f(x + h) - f(x - h)) / (2h)
+    return (f_x_plus_h - f_x_minus_h) / (2.0f * h);
+}
 
 TEST_CASE("Scalar Initialization", "[scalar]") {
     auto a = std::make_shared<zerograd::Scalar>(42.0f);
@@ -295,4 +322,136 @@ TEST_CASE("Engine Integration - A Simple Neuron", "[autograd]") {
     REQUIRE(w1->grad == Catch::Approx(1.0f).margin(0.01f));
     REQUIRE(x2->grad == Catch::Approx(0.5f).margin(0.01f));
     REQUIRE(w2->grad == Catch::Approx(0.0f).margin(0.01f));
+}
+
+TEST_CASE("Numerical Gradient Check", "[autograd]") {
+    auto a = std::make_shared<zerograd::Scalar>(2.0f);
+    auto b = std::make_shared<zerograd::Scalar>(3.0f);
+
+    auto forward = [&a, &b]() {
+        return (a * a) + (b * a); // a^2 + ab
+    };
+
+    auto out = forward();
+    out->backward();
+    float analytical_grad_a = a->grad; // the value from my engine's backward pass
+
+    // the value from the numerical gradient check
+    float numerical_grad_a = compute_numerical_gradient(forward, a);
+
+    REQUIRE(analytical_grad_a == Catch::Approx(numerical_grad_a).margin(1e-5f));
+}
+
+TEST_CASE("Gradient Accumulation - Shared Input", "[autograd]") {
+    auto a = std::make_shared<zerograd::Scalar>(3.0f);
+    auto b = a + a;
+
+    b->backward();
+
+    REQUIRE(a->grad == Catch::Approx(2.0f));
+}
+
+TEST_CASE("Gradient Accumulation - Used In Multiple Ops", "[autograd]") {
+    auto a = std::make_shared<zerograd::Scalar>(2.0f);
+    auto b = a * a * a;
+
+    b->backward();
+
+    REQUIRE(a->grad == Catch::Approx(12.0f));
+}
+
+TEST_CASE("Numerical Gradient - pow", "[autograd]") {
+    auto a = std::make_shared<zerograd::Scalar>(2.0f);
+    auto forward = [&a]() { return pow(a, 3.0f); };
+
+    auto out = forward();
+    out->backward();
+
+    REQUIRE(a->grad == Catch::Approx(compute_numerical_gradient(forward, a)).margin(1e-3f));
+}
+
+TEST_CASE("Numerical Gradient - exp", "[autograd]") {
+    auto a = std::make_shared<zerograd::Scalar>(1.0f);
+    auto forward = [&a]() { return exp(a); };
+
+    auto out = forward();
+    out->backward();
+
+    REQUIRE(a->grad == Catch::Approx(compute_numerical_gradient(forward, a)).margin(1e-3f));
+}
+
+TEST_CASE("Numerical Gradient - tanh", "[autograd]") {
+    auto a = std::make_shared<zerograd::Scalar>(0.5f);
+    auto forward = [&a]() { return tanh(a); };
+
+    auto out = forward();
+    out->backward();
+
+    REQUIRE(a->grad == Catch::Approx(compute_numerical_gradient(forward, a)).margin(1e-3f));
+}
+
+TEST_CASE("Numerical Gradient - relu", "[autograd]") {
+    auto a = std::make_shared<zerograd::Scalar>(1.5f);
+    auto forward = [&a]() { return relu(a); };
+
+    auto out = forward();
+    out->backward();
+
+    REQUIRE(a->grad == Catch::Approx(compute_numerical_gradient(forward, a)).margin(1e-3f));
+}
+
+TEST_CASE("Numerical Gradient - division", "[autograd]") {
+    auto a = std::make_shared<zerograd::Scalar>(4.0f);
+    auto b = std::make_shared<zerograd::Scalar>(2.0f);
+    auto forward = [&a, &b]() { return a / b; };
+
+    auto out = forward();
+    out->backward();
+
+    REQUIRE(a->grad == Catch::Approx(compute_numerical_gradient(forward, a)).margin(1e-3f));
+    a->grad = 0.0f; b->grad = 0.0f;
+    auto out2 = forward();
+    out2->backward();
+    REQUIRE(b->grad == Catch::Approx(compute_numerical_gradient(forward, b)).margin(1e-3f));
+}
+
+TEST_CASE("Deep Chain Rule", "[autograd]") {
+    auto a = std::make_shared<zerograd::Scalar>(2.0f);
+
+    // y = tanh(exp(a^2))
+    auto forward = [&a]() { return tanh(exp(pow(a, 2.0f))); };
+
+    auto out = forward();
+    out->backward();
+
+    REQUIRE(a->grad == Catch::Approx(compute_numerical_gradient(forward, a)).margin(1e-3f));
+}
+
+TEST_CASE("ReLU at zero - grad is zero", "[autograd]") {
+    auto a = std::make_shared<zerograd::Scalar>(0.0f);
+    auto b = relu(a);
+    b->backward();
+
+    REQUIRE(a->grad == Catch::Approx(0.0f));
+}
+
+TEST_CASE("Division by value close to zero - pow backward stability", "[autograd]") {
+    auto a = std::make_shared<zerograd::Scalar>(0.1f);
+    auto b = std::make_shared<zerograd::Scalar>(0.1f);
+    auto forward = [&a, &b]() { return a / b; };
+
+    auto out = forward();
+    out->backward();
+
+    REQUIRE(std::isfinite(a->grad));
+    REQUIRE(std::isfinite(b->grad));
+}
+
+TEST_CASE("Backward only called once - grad not double accumulated", "[autograd]") {
+    auto a = std::make_shared<zerograd::Scalar>(2.0f);
+    auto b = std::make_shared<zerograd::Scalar>(3.0f);
+    auto c = a * b;
+
+    c->backward();
+    REQUIRE(a->grad == Catch::Approx(3.0f));
 }
