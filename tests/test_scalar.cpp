@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 #include <zerograd/scalar.h>
+#include <cmath>
 
 TEST_CASE("Scalar Initialization", "[scalar]") {
     auto a = std::make_shared<zerograd::Scalar>(42.0f);
@@ -198,4 +199,51 @@ TEST_CASE("Scalar Division - 3", "[scalar]") {
     REQUIRE(children.size() == 2);
     REQUIRE(children[0]->data == Catch::Approx(10.0f));
     REQUIRE(children[1]->get_op() == "^-1.000000");
+}
+
+TEST_CASE("Scalar Exponential", "[scalar]") {
+    auto a = std::make_shared<zerograd::Scalar>(2.0f);
+    auto b = exp(a);
+
+    REQUIRE(b->data == Catch::Approx(std::exp(2.0f)));
+    
+    REQUIRE(b->get_op() == "exp");
+    auto children = b->get_children();
+    REQUIRE(children.size() == 1);
+    REQUIRE(children[0] == a);
+}
+
+TEST_CASE("Scalar Tanh", "[scalar]") {
+    auto a = std::make_shared<zerograd::Scalar>(0.5f);
+    auto b = tanh(a);
+
+    REQUIRE(b->data == Catch::Approx(std::tanh(0.5f)));
+    
+    REQUIRE(b->get_op() == "tanh");
+    auto children = b->get_children();
+    REQUIRE(children.size() == 1);
+    REQUIRE(children[0] == a);
+}
+
+TEST_CASE("Scalar ReLU", "[scalar]") {
+    auto a_pos = std::make_shared<zerograd::Scalar>(3.0f);
+    auto b_pos = relu(a_pos);
+
+    REQUIRE(b_pos->data == Catch::Approx(3.0f));
+    REQUIRE(b_pos->get_op() == "relu");
+    REQUIRE(b_pos->get_children().size() == 1);
+    REQUIRE(b_pos->get_children()[0] == a_pos);
+
+    auto a_neg = std::make_shared<zerograd::Scalar>(-5.0f);
+    auto b_neg = relu(a_neg);
+
+    REQUIRE(b_neg->data == Catch::Approx(0.0f));
+    REQUIRE(b_neg->get_op() == "relu");
+    REQUIRE(b_neg->get_children().size() == 1);
+    REQUIRE(b_neg->get_children()[0] == a_neg);
+    
+    auto a_zero = std::make_shared<zerograd::Scalar>(0.0f);
+    auto b_zero = relu(a_zero);
+
+    REQUIRE(b_zero->data == Catch::Approx(0.0f));
 }

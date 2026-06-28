@@ -48,6 +48,12 @@ namespace zerograd
         friend std::shared_ptr<Scalar> operator/(const std::shared_ptr<Scalar>& left, float right);
         friend std::shared_ptr<Scalar> operator/(float left, const std::shared_ptr<Scalar>& right);
 
+        friend std::shared_ptr<Scalar> exp(const std::shared_ptr<Scalar>& scalar);
+
+        // activation functions
+        friend std::shared_ptr<Scalar> tanh(const std::shared_ptr<Scalar>& scalar);
+        friend std::shared_ptr<Scalar> relu(const std::shared_ptr<Scalar>& scalar);
+
         friend std::ostream& operator<<(std::ostream& out, const std::shared_ptr<Scalar>& scalar);
     };
 }

@@ -1,5 +1,6 @@
 #include <zerograd/scalar.h>
 #include <cmath>
+#include <algorithm>
 
 namespace zerograd
 {
@@ -131,6 +132,48 @@ namespace zerograd
     std::shared_ptr<Scalar> operator/(float left, const std::shared_ptr<Scalar>& right)
     {
         return left * pow(right, -1.0f);
+    }
+
+    std::shared_ptr<Scalar> exp(const std::shared_ptr<Scalar>& scalar)
+    {
+        auto result = std::make_shared<Scalar>(
+            std::exp(scalar->data), 
+            std::vector<std::shared_ptr<Scalar>>{scalar},
+            "exp"
+        );
+
+        result->_backward = [scalar, out = result.get()]() {
+            scalar->grad += out->data * out->grad;
+        };
+
+        return result;
+    }
+
+    std::shared_ptr<Scalar> tanh(const std::shared_ptr<Scalar>& scalar)
+    {
+        float t = std::tanh(scalar->data);
+        auto result = std::make_shared<Scalar>(t, std::vector<std::shared_ptr<Scalar>>{scalar}, "tanh");
+
+        result->_backward = [scalar, out = result.get()]() {
+            scalar->grad += (1.0f - (out->data * out->data)) * out->grad;
+        };
+
+        return result;
+    }
+
+    std::shared_ptr<Scalar> relu(const std::shared_ptr<Scalar>& scalar)
+    {
+        auto result = std::make_shared<Scalar>(
+            std::max(0.0f, scalar->data),
+            std::vector<std::shared_ptr<Scalar>>{scalar},
+            "relu"
+        );
+
+        result->_backward = [scalar, out = result.get()]() {
+            scalar->grad += ((out->data == 0) ? 0 : 1) * out->grad;
+        };
+
+        return result;
     }
 
     std::ostream& operator<<(std::ostream& out, const std::shared_ptr<Scalar>& scalar)
