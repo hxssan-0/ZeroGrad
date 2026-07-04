@@ -1,0 +1,46 @@
+#pragma once
+
+#include <memory>
+#include <vector>
+#include <cstddef>
+#include <functional>
+#include <string>
+
+namespace zerograd
+{
+    class Tensor : public std::enable_shared_from_this<Tensor>
+    {
+    private:
+        bool requires_grad{}; // false by default to mimic PyTorch
+        std::function<void()> _backward = [](){};
+        std::vector<std::shared_ptr<Tensor>> _children;
+        std::string _op;
+
+        static std::vector<std::size_t> compute_broadcast_shape(const std::vector<std::size_t>& shape1, const std::vector<std::size_t>& shape2);
+        static std::vector<std::size_t> pad_shape(const std::vector<std::size_t>& shape, std::size_t result_shape_size);
+        static std::vector<std::size_t> compute_padded_strides(const std::vector<std::size_t>& strides, std::size_t result_shape_size, const std::vector<std::size_t>& shape_padded);
+        static std::vector<std::size_t> convert_flat_to_multi_index(std::size_t flat_idx, const std::vector<std::size_t>& shape);
+        static std::size_t convert_multi_to_flat_index(const std::vector<std::size_t>& multi_idx, const std::vector<std::size_t>& strides);
+
+    public:
+        std::vector<float> data;
+        std::vector<std::size_t> shape;
+        std::vector<std::size_t> strides;
+        std::vector<float> grad;
+
+        explicit Tensor(
+            std::vector<float> data,
+            std::vector<std::size_t> shape,
+            bool requires_grad = false,
+            std::vector<std::shared_ptr<Tensor>> _children = {},
+            std::string _op = ""
+        );
+
+        bool get_requires_grad() const;
+
+        friend std::shared_ptr<Tensor> add(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right);
+
+        friend std::shared_ptr<Tensor> operator+(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right);
+    };
+}
+
