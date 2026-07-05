@@ -139,3 +139,241 @@ TEST_CASE("Tensor Addition", "[tensor][forward][add]") {
         REQUIRE(result->data == std::vector<float>{3.0f, 4.0f, 5.0f});
     }
 }
+
+TEST_CASE("Tensor Subtraction", "[tensor][forward][sub]") {
+
+    SECTION("Same Shape (2,2) - (2,2)") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{10.0f, 20.0f, 30.0f, 40.0f},
+            std::vector<size_t>{2, 2}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},
+            std::vector<size_t>{2, 2}
+        );
+
+        auto result = t1 - t2;
+
+        REQUIRE(result->shape == std::vector<size_t>{2, 2});
+        std::vector<float> expected = {9.0f, 18.0f, 27.0f, 36.0f};
+        for (size_t i = 0; i < expected.size(); ++i)
+            REQUIRE(result->data[i] == Catch::Approx(expected[i]));
+    }
+
+    SECTION("Broadcasting (2,3) - (3,)") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{10.0f, 20.0f, 30.0f,
+                               40.0f, 50.0f, 60.0f},
+            std::vector<size_t>{2, 3}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f},
+            std::vector<size_t>{3}
+        );
+
+        auto result = t1 - t2;
+
+        REQUIRE(result->shape == std::vector<size_t>{2, 3});
+        std::vector<float> expected = {
+            9.0f, 18.0f, 27.0f,
+            39.0f, 48.0f, 57.0f
+        };
+        for (size_t i = 0; i < expected.size(); ++i)
+            REQUIRE(result->data[i] == Catch::Approx(expected[i]));
+    }
+
+    SECTION("Self Subtraction - result is zero") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f},
+            std::vector<size_t>{3}
+        );
+
+        auto result = t1 - t1;
+
+        for (size_t i = 0; i < 3; ++i)
+            REQUIRE(result->data[i] == Catch::Approx(0.0f));
+    }
+
+    SECTION("Subtraction with negative values") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{-1.0f, -2.0f, -3.0f},
+            std::vector<size_t>{3}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{-4.0f, -5.0f, -6.0f},
+            std::vector<size_t>{3}
+        );
+
+        auto result = t1 - t2;
+
+        std::vector<float> expected = {3.0f, 3.0f, 3.0f};
+        for (size_t i = 0; i < expected.size(); ++i)
+            REQUIRE(result->data[i] == Catch::Approx(expected[i]));
+    }
+
+    SECTION("Scalar (0D) - Scalar (0D)") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{5.0f},
+            std::vector<size_t>{}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{3.0f},
+            std::vector<size_t>{}
+        );
+
+        auto result = t1 - t2;
+
+        REQUIRE(result->shape == std::vector<size_t>{});
+        REQUIRE(result->data[0] == Catch::Approx(2.0f));
+    }
+
+    SECTION("Incompatible shapes throw") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f},
+            std::vector<size_t>{3}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f},
+            std::vector<size_t>{2}
+        );
+        REQUIRE_THROWS_AS(t1 - t2, std::invalid_argument);
+    }
+}
+
+TEST_CASE("Tensor Multiplication", "[tensor][forward][mul]") {
+
+    SECTION("Same Shape (2,2) * (2,2)") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},
+            std::vector<size_t>{2, 2}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{2.0f, 3.0f, 4.0f, 5.0f},
+            std::vector<size_t>{2, 2}
+        );
+
+        auto result = t1 * t2;
+
+        REQUIRE(result->shape == std::vector<size_t>{2, 2});
+        std::vector<float> expected = {2.0f, 6.0f, 12.0f, 20.0f};
+        for (size_t i = 0; i < expected.size(); ++i)
+            REQUIRE(result->data[i] == Catch::Approx(expected[i]));
+    }
+
+    SECTION("Broadcasting (2,3) * (3,)") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f,
+                               4.0f, 5.0f, 6.0f},
+            std::vector<size_t>{2, 3}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{2.0f, 3.0f, 4.0f},
+            std::vector<size_t>{3}
+        );
+
+        auto result = t1 * t2;
+
+        REQUIRE(result->shape == std::vector<size_t>{2, 3});
+        std::vector<float> expected = {
+            2.0f,  6.0f,  12.0f,
+            8.0f, 15.0f,  24.0f
+        };
+        for (size_t i = 0; i < expected.size(); ++i)
+            REQUIRE(result->data[i] == Catch::Approx(expected[i]));
+    }
+
+    SECTION("Multiply by zero") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},
+            std::vector<size_t>{4}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{0.0f, 0.0f, 0.0f, 0.0f},
+            std::vector<size_t>{4}
+        );
+
+        auto result = t1 * t2;
+
+        for (size_t i = 0; i < 4; ++i)
+            REQUIRE(result->data[i] == Catch::Approx(0.0f));
+    }
+
+    SECTION("Multiply by one") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},
+            std::vector<size_t>{4}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 1.0f, 1.0f, 1.0f},
+            std::vector<size_t>{4}
+        );
+
+        auto result = t1 * t2;
+
+        for (size_t i = 0; i < 4; ++i)
+            REQUIRE(result->data[i] == Catch::Approx(t1->data[i]));
+    }
+
+    SECTION("Multiply by negative") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, -2.0f, 3.0f, -4.0f},
+            std::vector<size_t>{4}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{-1.0f, -1.0f, -1.0f, -1.0f},
+            std::vector<size_t>{4}
+        );
+
+        auto result = t1 * t2;
+
+        std::vector<float> expected = {-1.0f, 2.0f, -3.0f, 4.0f};
+        for (size_t i = 0; i < expected.size(); ++i)
+            REQUIRE(result->data[i] == Catch::Approx(expected[i]));
+    }
+
+    SECTION("Scalar (0D) * Scalar (0D)") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{3.0f},
+            std::vector<size_t>{}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{4.0f},
+            std::vector<size_t>{}
+        );
+
+        auto result = t1 * t2;
+
+        REQUIRE(result->shape == std::vector<size_t>{});
+        REQUIRE(result->data[0] == Catch::Approx(12.0f));
+    }
+
+    SECTION("Scalar (0D) * 1D tensor") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{2.0f},
+            std::vector<size_t>{}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f},
+            std::vector<size_t>{3}
+        );
+
+        auto result = t1 * t2;
+
+        REQUIRE(result->shape == std::vector<size_t>{3});
+        std::vector<float> expected = {2.0f, 4.0f, 6.0f};
+        for (size_t i = 0; i < expected.size(); ++i)
+            REQUIRE(result->data[i] == Catch::Approx(expected[i]));
+    }
+
+    SECTION("Incompatible shapes throw") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f},
+            std::vector<size_t>{3}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f},
+            std::vector<size_t>{2}
+        );
+        REQUIRE_THROWS_AS(t1 * t2, std::invalid_argument);
+    }
+}

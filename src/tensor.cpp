@@ -114,6 +114,17 @@ namespace zerograd
         return flat_idx;
     }
 
+    std::size_t Tensor::calculate_total_elements(const std::vector<std::size_t>& shape)
+    {
+        std::size_t total_elements = 1;
+
+        for (std::size_t dim : shape) {
+            total_elements *= dim;
+        }
+
+        return total_elements;
+    }
+
     bool Tensor::get_requires_grad() const
     {
         return requires_grad;
@@ -125,10 +136,7 @@ namespace zerograd
         std::vector<std::size_t> result_shape = Tensor::compute_broadcast_shape(left->shape, right->shape);
 
         // calculating total number of elements in the tensor to allocate memory for it
-        std::size_t total_elements = 1;
-        for (std::size_t dim : result_shape) {
-            total_elements *= dim;
-        }
+        std::size_t total_elements = Tensor::calculate_total_elements(result_shape);
 
         std::vector<float> result_data(total_elements, 0.0f);
 
@@ -198,8 +206,170 @@ namespace zerograd
         return result;
     }
 
+    std::shared_ptr<Tensor> sub(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right)
+    {
+        // first checking if the shapes are compatible and finding out the shape of the result tensor
+        std::vector<std::size_t> result_shape = Tensor::compute_broadcast_shape(left->shape, right->shape);
+
+        // calculating total number of elements in the tensor to allocate memory for it
+        std::size_t total_elements = Tensor::calculate_total_elements(result_shape);
+
+        std::vector<float> result_data(total_elements, 0.0f);
+
+        // padding the shapes of the tensors
+            std::vector<std::size_t> left_shape_padded = 
+            (left->shape.size() == result_shape.size()) 
+            ? left->shape 
+            : Tensor::pad_shape(left->shape, result_shape.size());
+
+            std::vector<std::size_t> right_shape_padded = 
+            (right->shape.size() == result_shape.size()) 
+            ? right->shape 
+            : Tensor::pad_shape(right->shape, result_shape.size());
+
+            // if shapes were padded then we needed padded strides
+            std::vector<std::size_t> left_strides_padded = Tensor::compute_padded_strides(
+                left->strides, 
+                result_shape.size(), 
+                left_shape_padded
+            );
+
+            std::vector<std::size_t> right_strides_padded = Tensor::compute_padded_strides(
+                right->strides, 
+                result_shape.size(), 
+                right_shape_padded
+            );
+
+        // now performing element wise subtraction
+        for (std::size_t i{}; i < total_elements; ++i) {
+            std::vector<std::size_t> multi_idx = Tensor::convert_flat_to_multi_index(i, result_shape);
+            std::size_t l_idx = Tensor::convert_multi_to_flat_index(multi_idx, left_strides_padded);
+            std::size_t r_idx = Tensor::convert_multi_to_flat_index(multi_idx, right_strides_padded);
+
+            result_data[i] = left->data[l_idx] - right->data[r_idx];
+        }
+
+        // creating the result Tensor object
+        bool requires_grad = left->requires_grad || right->requires_grad;
+        std::string op = "-";
+
+        auto result = std::make_shared<Tensor>(
+            result_data, 
+            result_shape, 
+            requires_grad, 
+            std::vector<std::shared_ptr<Tensor>>{left, right}, 
+            op
+        );
+
+        result->_backward = [left, right, out = result.get(), left_strides_padded, right_strides_padded, result_shape = result->shape]() {
+
+            for (std::size_t i{}; i < out->grad.size(); ++i) {
+
+                std::vector<std::size_t> multi_idx = Tensor::convert_flat_to_multi_index(i, result_shape);
+
+                std::size_t l_idx = Tensor::convert_multi_to_flat_index(multi_idx, left_strides_padded);
+                std::size_t r_idx = Tensor::convert_multi_to_flat_index(multi_idx, right_strides_padded);
+
+                if (left->requires_grad) {
+                    left->grad[l_idx] += out->grad[i];
+                }
+                if (right->requires_grad) {
+                    right->grad[r_idx] -= out->grad[i];
+                }
+            }
+        };
+
+        return result;
+    }
+
+    std::shared_ptr<Tensor> mul(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right)
+    {
+        // first checking if the shapes are compatible and finding out the shape of the result tensor
+        std::vector<std::size_t> result_shape = Tensor::compute_broadcast_shape(left->shape, right->shape);
+
+        // calculating total number of elements in the tensor to allocate memory for it
+        std::size_t total_elements = Tensor::calculate_total_elements(result_shape);
+
+        std::vector<float> result_data(total_elements, 0.0f);
+
+        // padding the shapes of the tensors
+            std::vector<std::size_t> left_shape_padded = 
+            (left->shape.size() == result_shape.size()) 
+            ? left->shape 
+            : Tensor::pad_shape(left->shape, result_shape.size());
+
+            std::vector<std::size_t> right_shape_padded = 
+            (right->shape.size() == result_shape.size()) 
+            ? right->shape 
+            : Tensor::pad_shape(right->shape, result_shape.size());
+
+            // if shapes were padded then we needed padded strides
+            std::vector<std::size_t> left_strides_padded = Tensor::compute_padded_strides(
+                left->strides, 
+                result_shape.size(), 
+                left_shape_padded
+            );
+
+            std::vector<std::size_t> right_strides_padded = Tensor::compute_padded_strides(
+                right->strides, 
+                result_shape.size(), 
+                right_shape_padded
+            );
+
+        // now performing element wise multiplication
+        for (std::size_t i{}; i < total_elements; ++i) {
+            std::vector<std::size_t> multi_idx = Tensor::convert_flat_to_multi_index(i, result_shape);
+            std::size_t l_idx = Tensor::convert_multi_to_flat_index(multi_idx, left_strides_padded);
+            std::size_t r_idx = Tensor::convert_multi_to_flat_index(multi_idx, right_strides_padded);
+
+            result_data[i] = left->data[l_idx] * right->data[r_idx];
+        }
+
+        // creating the result Tensor object
+        bool requires_grad = left->requires_grad || right->requires_grad;
+        std::string op = "*";
+
+        auto result = std::make_shared<Tensor>(
+            result_data, 
+            result_shape, 
+            requires_grad, 
+            std::vector<std::shared_ptr<Tensor>>{left, right}, 
+            op
+        );
+
+        result->_backward = [left, right, out = result.get(), left_strides_padded, right_strides_padded, result_shape = result->shape]() {
+
+            for (std::size_t i{}; i < out->grad.size(); ++i) {
+
+                std::vector<std::size_t> multi_idx = Tensor::convert_flat_to_multi_index(i, result_shape);
+
+                std::size_t l_idx = Tensor::convert_multi_to_flat_index(multi_idx, left_strides_padded);
+                std::size_t r_idx = Tensor::convert_multi_to_flat_index(multi_idx, right_strides_padded);
+
+                if (left->requires_grad) {
+                    left->grad[l_idx] += right->data[i] * out->grad[i];
+                }
+                if (right->requires_grad) {
+                    right->grad[r_idx] += left->data[i] * out->grad[i];
+                }
+            }
+        };
+
+        return result;
+    }
+
     std::shared_ptr<Tensor> operator+(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right)
     {
         return add(left, right);
+    }
+
+    std::shared_ptr<Tensor> operator-(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right)
+    {
+        return sub(left, right);
+    }
+
+    std::shared_ptr<Tensor> operator*(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right)
+    {
+        return mul(left, right);
     }
 }

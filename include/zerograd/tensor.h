@@ -21,6 +21,7 @@ namespace zerograd
         static std::vector<std::size_t> compute_padded_strides(const std::vector<std::size_t>& strides, std::size_t result_shape_size, const std::vector<std::size_t>& shape_padded);
         static std::vector<std::size_t> convert_flat_to_multi_index(std::size_t flat_idx, const std::vector<std::size_t>& shape);
         static std::size_t convert_multi_to_flat_index(const std::vector<std::size_t>& multi_idx, const std::vector<std::size_t>& strides);
+        static std::size_t calculate_total_elements(const std::vector<std::size_t>& shape);
 
     public:
         std::vector<float> data;
@@ -39,8 +40,14 @@ namespace zerograd
         bool get_requires_grad() const;
 
         friend std::shared_ptr<Tensor> add(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right);
+        friend std::shared_ptr<Tensor> sub(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right);
+        friend std::shared_ptr<Tensor> mul(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right);
+
 
         friend std::shared_ptr<Tensor> operator+(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right);
+        friend std::shared_ptr<Tensor> operator-(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right);
+        friend std::shared_ptr<Tensor> operator*(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right);
+
     };
 }
 
