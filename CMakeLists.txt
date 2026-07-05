@@ -7,7 +7,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # ====== The C++ Setup ======
-add_library(zerograd_core src/scalar.cpp)
+add_library(zerograd_core src/scalar.cpp src/tensor.cpp)
+
+set_target_properties(zerograd_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # This is how CMake knows where the C++ headers reside
 target_include_directories(zerograd_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -23,7 +25,7 @@ FetchContent_MakeAvailable(Catch2)
 
 enable_testing()
 
-add_executable(zerograd_tests tests/test_scalar.cpp)
+add_executable(zerograd_tests tests/test_scalar.cpp tests/test_tensor.cpp)
 
 target_link_libraries(zerograd_tests PRIVATE Catch2::Catch2WithMain zerograd_core)
 

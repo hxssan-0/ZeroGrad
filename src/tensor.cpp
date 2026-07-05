@@ -80,9 +80,7 @@ namespace zerograd
     {
         std::vector<std::size_t> strides_padded(result_shape_size, 0);
 
-        if (strides.size() != result_shape_size) {
-            std::copy(strides.begin(), strides.end(), strides_padded.begin() + (result_shape_size - strides.size()));
-        }
+        std::copy(strides.begin(), strides.end(), strides_padded.begin() + (result_shape_size - strides.size()));
 
         for (std::size_t i{}; i < strides_padded.size(); ++i) {
             if (shape_padded[i] == 1) {
@@ -146,15 +144,17 @@ namespace zerograd
             : Tensor::pad_shape(right->shape, result_shape.size());
 
             // if shapes were padded then we needed padded strides
-            std::vector<std::size_t> left_strides_padded = 
-            (left->shape.size() == result_shape.size()) 
-            ? left->strides 
-            : Tensor::compute_padded_strides(left->strides, result_shape.size(), left_shape_padded);
+            std::vector<std::size_t> left_strides_padded = Tensor::compute_padded_strides(
+                left->strides, 
+                result_shape.size(), 
+                left_shape_padded
+            );
 
-            std::vector<std::size_t> right_strides_padded = 
-            (right->shape.size() == result_shape.size()) 
-            ? right->strides 
-            : Tensor::compute_padded_strides(right->strides, result_shape.size(), right_shape_padded);
+            std::vector<std::size_t> right_strides_padded = Tensor::compute_padded_strides(
+                right->strides, 
+                result_shape.size(), 
+                right_shape_padded
+            );
 
         // now performing element wise addition
         for (std::size_t i{}; i < total_elements; ++i) {
@@ -179,7 +179,7 @@ namespace zerograd
 
         result->_backward = [left, right, out = result.get(), left_strides_padded, right_strides_padded, result_shape = result->shape]() {
 
-            for (size_t i{}; i < out->grad.size(); ++i) {
+            for (std::size_t i{}; i < out->grad.size(); ++i) {
 
                 std::vector<std::size_t> multi_idx = Tensor::convert_flat_to_multi_index(i, result_shape);
 
