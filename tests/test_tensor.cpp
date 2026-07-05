@@ -3,6 +3,7 @@
 #include <zerograd/tensor.h>
 #include <vector>
 #include <memory>
+#include <numeric>
 
 TEST_CASE("Tensor Addition", "[tensor][forward][add]") {
     
@@ -375,5 +376,205 @@ TEST_CASE("Tensor Multiplication", "[tensor][forward][mul]") {
             std::vector<size_t>{2}
         );
         REQUIRE_THROWS_AS(t1 * t2, std::invalid_argument);
+    }
+}
+
+TEST_CASE("Tensor Matmul", "[tensor][forward][matmul]") {
+
+    SECTION("Square matrices (2,2) @ (2,2)") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},
+            std::vector<size_t>{2, 2}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{5.0f, 6.0f, 7.0f, 8.0f},
+            std::vector<size_t>{2, 2}
+        );
+
+        auto result = matmul(t1, t2);
+
+        REQUIRE(result->shape == std::vector<size_t>{2, 2});
+        std::vector<float> expected = {19.0f, 22.0f, 43.0f, 50.0f};
+        for (size_t i = 0; i < expected.size(); ++i)
+            REQUIRE(result->data[i] == Catch::Approx(expected[i]));
+    }
+
+    SECTION("Rectangular (2,3) @ (3,2)") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f,
+                               4.0f, 5.0f, 6.0f},
+            std::vector<size_t>{2, 3}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{7.0f,  8.0f,
+                               9.0f,  10.0f,
+                               11.0f, 12.0f},
+            std::vector<size_t>{3, 2}
+        );
+
+        auto result = matmul(t1, t2);
+
+        REQUIRE(result->shape == std::vector<size_t>{2, 2});
+        // row 0: [1*7+2*9+3*11, 1*8+2*10+3*12] = [58, 64]
+        // row 1: [4*7+5*9+6*11, 4*8+5*10+6*12] = [139, 154]
+        std::vector<float> expected = {58.0f, 64.0f, 139.0f, 154.0f};
+        for (size_t i = 0; i < expected.size(); ++i)
+            REQUIRE(result->data[i] == Catch::Approx(expected[i]));
+    }
+
+    SECTION("Rectangular (3,2) @ (2,4)") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f,
+                               3.0f, 4.0f,
+                               5.0f, 6.0f},
+            std::vector<size_t>{3, 2}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f,
+                               5.0f, 6.0f, 7.0f, 8.0f},
+            std::vector<size_t>{2, 4}
+        );
+
+        auto result = matmul(t1, t2);
+
+        REQUIRE(result->shape == std::vector<size_t>{3, 4});
+        std::vector<float> expected = {
+            11.0f, 14.0f, 17.0f, 20.0f,
+            23.0f, 30.0f, 37.0f, 44.0f,
+            35.0f, 46.0f, 57.0f, 68.0f
+        };
+        for (size_t i = 0; i < expected.size(); ++i)
+            REQUIRE(result->data[i] == Catch::Approx(expected[i]));
+    }
+
+    SECTION("Identity matrix - result equals input") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f,
+                               4.0f, 5.0f, 6.0f},
+            std::vector<size_t>{2, 3}
+        );
+        auto identity = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 0.0f, 0.0f,
+                               0.0f, 1.0f, 0.0f,
+                               0.0f, 0.0f, 1.0f},
+            std::vector<size_t>{3, 3}
+        );
+
+        auto result = matmul(t1, identity);
+
+        REQUIRE(result->shape == std::vector<size_t>{2, 3});
+        for (size_t i = 0; i < t1->data.size(); ++i)
+            REQUIRE(result->data[i] == Catch::Approx(t1->data[i]));
+    }
+
+    SECTION("Multiply by zero matrix - result is zero") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},
+            std::vector<size_t>{2, 2}
+        );
+        auto zeros = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{0.0f, 0.0f, 0.0f, 0.0f},
+            std::vector<size_t>{2, 2}
+        );
+
+        auto result = matmul(t1, zeros);
+
+        for (size_t i = 0; i < result->data.size(); ++i)
+            REQUIRE(result->data[i] == Catch::Approx(0.0f));
+    }
+
+    SECTION("Batched (2,3,4) @ (2,4,5)") {
+        // batch of 2, each (3,4) @ (4,5) = (3,5)
+        std::vector<float> left_data(2 * 3 * 4);
+        std::vector<float> right_data(2 * 4 * 5);
+        std::iota(left_data.begin(), left_data.end(), 1.0f);
+        std::iota(right_data.begin(), right_data.end(), 1.0f);
+
+        auto t1 = std::make_shared<zerograd::Tensor>(left_data, std::vector<size_t>{2, 3, 4});
+        auto t2 = std::make_shared<zerograd::Tensor>(right_data, std::vector<size_t>{2, 4, 5});
+
+        auto result = matmul(t1, t2);
+
+        REQUIRE(result->shape == std::vector<size_t>{2, 3, 5});
+        REQUIRE(result->data.size() == 2 * 3 * 5);
+    }
+
+    SECTION("Batched with broadcasting (1,3,4) @ (2,4,5)") {
+        std::vector<float> left_data(1 * 3 * 4, 1.0f);
+        std::vector<float> right_data(2 * 4 * 5, 1.0f);
+
+        auto t1 = std::make_shared<zerograd::Tensor>(left_data, std::vector<size_t>{1, 3, 4});
+        auto t2 = std::make_shared<zerograd::Tensor>(right_data, std::vector<size_t>{2, 4, 5});
+
+        auto result = matmul(t1, t2);
+
+        // batch dim broadcasts: (1,3,4) @ (2,4,5) = (2,3,5)
+        REQUIRE(result->shape == std::vector<size_t>{2, 3, 5});
+        // each element should be 4 (sum of 4 ones)
+        for (size_t i = 0; i < result->data.size(); ++i)
+            REQUIRE(result->data[i] == Catch::Approx(4.0f));
+    }
+
+    SECTION("Vector dot product (1,N) @ (N,1) = (1,1)") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f},
+            std::vector<size_t>{1, 3}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{4.0f, 5.0f, 6.0f},
+            std::vector<size_t>{3, 1}
+        );
+
+        auto result = matmul(t1, t2);
+
+        REQUIRE(result->shape == std::vector<size_t>{1, 1});
+        // 1*4 + 2*5 + 3*6 = 32
+        REQUIRE(result->data[0] == Catch::Approx(32.0f));
+    }
+
+    SECTION("Outer product (N,1) @ (1,M) = (N,M)") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f},
+            std::vector<size_t>{3, 1}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{4.0f, 5.0f, 6.0f},
+            std::vector<size_t>{1, 3}
+        );
+
+        auto result = matmul(t1, t2);
+
+        REQUIRE(result->shape == std::vector<size_t>{3, 3});
+        std::vector<float> expected = {
+            4.0f,  5.0f,  6.0f,
+            8.0f,  10.0f, 12.0f,
+            12.0f, 15.0f, 18.0f
+        };
+        for (size_t i = 0; i < expected.size(); ++i)
+            REQUIRE(result->data[i] == Catch::Approx(expected[i]));
+    }
+
+    SECTION("Incompatible inner dims throw") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f},
+            std::vector<size_t>{2, 3}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},
+            std::vector<size_t>{2, 2}
+        );
+        REQUIRE_THROWS_AS(matmul(t1, t2), std::runtime_error);
+    }
+
+    SECTION("Rank < 2 throws") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f},
+            std::vector<size_t>{3}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f},
+            std::vector<size_t>{3}
+        );
+        REQUIRE_THROWS_AS(matmul(t1, t2), std::runtime_error);
     }
 }

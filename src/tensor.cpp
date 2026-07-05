@@ -358,6 +358,102 @@ namespace zerograd
         return result;
     }
 
+    std::shared_ptr<Tensor> matmul(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right)
+    {
+        if (left->shape.size() < 2 || right->shape.size() < 2) {
+            throw std::runtime_error("matmul requires tensors to have a minimum rank of 2.");
+        }
+
+        // consider left has last 2 dims (M, K) and right has last 2 dims (K, N)
+        std::size_t M = left->shape[left->shape.size() - 2];
+        std::size_t K_left = left->shape[left->shape.size() - 1];
+        std::size_t K_right = right->shape[right->shape.size() - 2];
+        std::size_t N = right->shape[right->shape.size() - 1];
+
+        if (K_left != K_right) {
+            throw std::runtime_error("dimensions incompatible for matmul.");
+        }
+        std::size_t K = K_left;
+
+        std::vector<std::size_t> left_batch(left->shape.begin(), left->shape.end() - 2);
+        std::vector<std::size_t> right_batch(right->shape.begin(), right->shape.end() - 2);
+        std::vector<std::size_t> result_shape = Tensor::compute_broadcast_shape(left_batch, right_batch);
+        result_shape.push_back(M); result_shape.push_back(N);
+
+        std::size_t total_elements = Tensor::calculate_total_elements(result_shape);
+        std::vector<float> result_data(total_elements, 0.0f);
+
+        std::vector<std::size_t> left_shape_padded = Tensor::pad_shape(left->shape, result_shape.size());
+        std::vector<std::size_t> right_shape_padded = Tensor::pad_shape(right->shape, result_shape.size());
+
+        std::vector<std::size_t> left_strides_padded = Tensor::compute_padded_strides(
+            left->strides, result_shape.size(), left_shape_padded
+        );
+
+        std::vector<std::size_t> right_strides_padded = Tensor::compute_padded_strides(
+            right->strides, result_shape.size(), right_shape_padded
+        );
+
+        // forward pass
+        for (std::size_t i{}; i < total_elements; ++i) {
+            std::vector<std::size_t> multi_idx = Tensor::convert_flat_to_multi_index(i, result_shape);
+            std::size_t row = multi_idx[result_shape.size() - 2];
+            std::size_t col = multi_idx[result_shape.size() - 1];
+
+            float dot_product = 0.0f;
+            for (std::size_t k{}; k < K; ++k) {
+                auto l_lookup = multi_idx;
+                l_lookup[result_shape.size() - 1] = k;
+
+                auto r_lookup = multi_idx;
+                r_lookup[result_shape.size() - 2] = k;
+
+                std::size_t l_flat = Tensor::convert_multi_to_flat_index(l_lookup, left_strides_padded);
+                std::size_t r_flat = Tensor::convert_multi_to_flat_index(r_lookup, right_strides_padded);
+
+                dot_product += left->data[l_flat] * right->data[r_flat];
+            }
+            result_data[i] = dot_product;
+        }
+        
+        bool requires_grad = left->requires_grad || right->requires_grad;
+        auto result = std::make_shared<Tensor>(
+            result_data, 
+            result_shape, 
+            requires_grad, 
+            std::vector<std::shared_ptr<Tensor>>{left, right}, 
+            "@"
+        );
+
+        result->_backward = [left, right, out = result.get(), left_strides_padded, right_strides_padded, result_shape, K]() {
+            for (std::size_t i = 0; i < out->grad.size(); ++i) {
+                std::vector<std::size_t> multi_idx = Tensor::convert_flat_to_multi_index(i, result_shape);
+                std::size_t row = multi_idx[result_shape.size() - 2];
+                std::size_t col = multi_idx[result_shape.size() - 1];
+
+                for (std::size_t k = 0; k < K; ++k) {
+                    auto l_lookup = multi_idx;
+                    l_lookup[result_shape.size() - 1] = k;
+
+                    auto r_lookup = multi_idx;
+                    r_lookup[result_shape.size() - 2] = k;
+
+                    std::size_t l_flat = Tensor::convert_multi_to_flat_index(l_lookup, left_strides_padded);
+                    std::size_t r_flat = Tensor::convert_multi_to_flat_index(r_lookup, right_strides_padded);
+
+                    if (left->requires_grad) {
+                        left->grad[l_flat] += out->grad[i] * right->data[r_flat];
+                    }
+                    if (right->requires_grad) {
+                        right->grad[r_flat] += left->data[l_flat] * out->grad[i];
+                    }
+                }
+            }
+        };
+
+        return result;
+    }
+
     std::shared_ptr<Tensor> operator+(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right)
     {
         return add(left, right);
