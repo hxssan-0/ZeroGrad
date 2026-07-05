@@ -81,4 +81,61 @@ TEST_CASE("Tensor Addition", "[tensor][forward][add]") {
             REQUIRE(result->data[i] == Catch::Approx(expected[i]));
         }
     }
+
+    SECTION("Incompatible shapes throw") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f}, 
+            std::vector<size_t>{3}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f}, 
+            std::vector<size_t>{2}
+        );
+        REQUIRE_THROWS_AS(t1 + t2, std::invalid_argument);
+    }
+
+    SECTION("1D + 1D same size") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f}, 
+            std::vector<size_t>{3}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{4.0f, 5.0f, 6.0f}, 
+            std::vector<size_t>{3}
+        );
+        auto result = t1 + t2;
+        REQUIRE(result->data == std::vector<float>{5.0f, 7.0f, 9.0f});
+    }
+
+    SECTION("Scalar (0D) + Scalar (0D)") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{3.0f}, 
+            std::vector<size_t>{}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{4.0f}, 
+            std::vector<size_t>{}
+        );
+
+        auto result = t1 + t2;
+
+        REQUIRE(result->shape == std::vector<size_t>{});
+        REQUIRE(result->data[0] == Catch::Approx(7.0f));
+    }
+
+    SECTION("Scalar (0D) + 1D tensor (3,)") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{2.0f}, 
+            std::vector<size_t>{}
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f}, 
+            std::vector<size_t>{3}
+        );
+
+        auto result = t1 + t2;
+
+        REQUIRE(result->shape == std::vector<size_t>{3});
+        REQUIRE(result->data == std::vector<float>{3.0f, 4.0f, 5.0f});
+    }
 }
