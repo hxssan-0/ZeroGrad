@@ -2,6 +2,7 @@
 #include <stdexcept>
 #include <algorithm>
 #include <iterator>
+#include <cmath>
 
 namespace zerograd
 {
@@ -447,6 +448,148 @@ namespace zerograd
                     if (right->requires_grad) {
                         right->grad[r_flat] += left->data[l_flat] * out->grad[i];
                     }
+                }
+            }
+        };
+
+        return result;
+    }
+
+    std::shared_ptr<Tensor> relu(const std::shared_ptr<Tensor>& tensor)
+    {
+        std::vector<float> result_data(tensor->data.size());
+
+        for (std::size_t i{}; i < result_data.size(); ++i) {
+            result_data[i] = std::max(0.0f, tensor->data[i]);
+        }
+
+        auto result = std::make_shared<Tensor>(
+            result_data,
+            tensor->shape,
+            tensor->requires_grad,
+            std::vector<std::shared_ptr<Tensor>>{tensor},
+            "relu"
+        );
+
+        result->_backward = [tensor, out = result.get()]() {
+            if (tensor->requires_grad) {
+                for (std::size_t i{}; i < out->grad.size(); ++i) {
+                    tensor->grad[i] += ((out->data[i] == 0) ? 0 : 1) * out->grad[i];  
+                }
+            }
+        };
+
+        return result;
+    }
+
+    float Tensor::compute_sigmoid(float x)
+    {
+        return 1 / (1 + std::exp(x));
+    }
+
+    std::shared_ptr<Tensor> sigmoid(const std::shared_ptr<Tensor>& tensor)
+    {
+        std::vector<float> result_data(tensor->data.size());
+
+        for (std::size_t i{}; i < result_data.size(); ++i) {
+            result_data[i] = Tensor::compute_sigmoid(tensor->data[i]);
+        }
+
+        auto result = std::make_shared<Tensor>(
+            result_data,
+            tensor->shape,
+            tensor->requires_grad,
+            std::vector<std::shared_ptr<Tensor>>{tensor},
+            "sigmoid"
+        );
+
+        result->_backward = [tensor, out = result.get()]() {
+            if (tensor->requires_grad) {
+                for (std::size_t i{}; i < out->grad.size(); ++i) {
+                    tensor->grad[i] += (out->data[i] * (1.0f - out->data[i])) * out->grad[i];  
+                }
+            }
+        };
+
+        return result;
+    }
+
+    std::shared_ptr<Tensor> tanh(const std::shared_ptr<Tensor>& tensor)
+    {
+        std::vector<float> result_data(tensor->data.size());
+
+        for (std::size_t i{}; i < result_data.size(); ++i) {
+            result_data[i] = std::tanh(tensor->data[i]);
+        }
+
+        auto result = std::make_shared<Tensor>(
+            result_data,
+            tensor->shape,
+            tensor->requires_grad,
+            std::vector<std::shared_ptr<Tensor>>{tensor},
+            "tanh"
+        );
+
+        result->_backward = [tensor, out = result.get()]() {
+            if (tensor->requires_grad) {
+                for (std::size_t i{}; i < out->grad.size(); ++i) {
+                    tensor->grad[i] += (1.0f - (out->data[i] * out->data[i])) * out->grad[i];  
+                }
+            }
+        };
+
+        return result;
+    }
+
+    std::shared_ptr<Tensor> sum(const std::shared_ptr<Tensor>& tensor)
+    {
+        float s = 0.0f;
+
+        for (std::size_t i{}; i < tensor->data.size(); ++i) {
+            s += tensor->data[i];
+        }
+
+        auto result = std::make_shared<Tensor>(
+            std::vector<float>{s},
+            std::vector<std::size_t>{},
+            tensor->requires_grad,
+            std::vector<std::shared_ptr<Tensor>>{tensor},
+            "sum"
+        );
+
+        result->_backward = [tensor, out = result.get()]() {
+            if (tensor->requires_grad) {
+                for (std::size_t i{}; i < tensor->grad.size(); ++i) {
+                    tensor->grad[i] += out->grad[0];  
+                }
+            }
+        };
+
+        return result;
+    }
+
+    std::shared_ptr<Tensor> mean(const std::shared_ptr<Tensor>& tensor)
+    {
+        float m = 0.0f;
+
+        for (std::size_t i{}; i < tensor->data.size(); ++i) {
+            m += tensor->data[i];
+        }
+
+        m /= static_cast<float>(tensor->data.size());
+
+        auto result = std::make_shared<Tensor>(
+            std::vector<float>{m},
+            std::vector<std::size_t>{},
+            tensor->requires_grad,
+            std::vector<std::shared_ptr<Tensor>>{tensor},
+            "mean"
+        );
+
+        result->_backward = [tensor, out = result.get()]() {
+            if (tensor->requires_grad) {
+                for (std::size_t i{}; i < tensor->grad.size(); ++i) {
+                    tensor->grad[i] += out->grad[0] / static_cast<float>(tensor->grad.size());  
                 }
             }
         };
