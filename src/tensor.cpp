@@ -484,7 +484,7 @@ namespace zerograd
 
     float Tensor::compute_sigmoid(float x)
     {
-        return 1 / (1 + std::exp(x));
+        return 1 / (1 + std::exp(-x));
     }
 
     std::shared_ptr<Tensor> sigmoid(const std::shared_ptr<Tensor>& tensor)
@@ -595,6 +595,41 @@ namespace zerograd
         };
 
         return result;
+    }
+
+    void Tensor::build_topo(
+            const std::shared_ptr<Tensor>& node,
+            std::vector<std::shared_ptr<Tensor>>& topo,
+            std::unordered_set<std::shared_ptr<Tensor>>& visited
+        )
+    {
+        if (visited.contains(node))
+            return;
+
+        visited.insert(node);
+        for (const std::shared_ptr<Tensor>& child : node->_children) {
+            build_topo(child, topo, visited);
+        }
+        topo.push_back(node);
+    }
+
+    void Tensor::backward()
+    {
+        if (this->data.size() != 1) {
+            throw std::runtime_error("backward can only be called on scalar tensors");
+        }
+
+        std::vector<std::shared_ptr<Tensor>> topo;
+        std::unordered_set<std::shared_ptr<Tensor>> visited;
+
+        build_topo(shared_from_this(), topo, visited);
+
+        if (this->requires_grad)
+            this->grad[0] = 1.0f;
+
+        for (auto it = topo.rbegin(); it != topo.rend(); ++it) {
+            (*it)->_backward();
+        }
     }
 
     std::shared_ptr<Tensor> operator+(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right)

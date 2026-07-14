@@ -4,6 +4,34 @@
 #include <vector>
 #include <memory>
 #include <numeric>
+#include <cmath>
+
+inline float compute_tensor_numerical_gradient(
+    const std::function<std::shared_ptr<zerograd::Tensor>()>& compute_graph,
+    const std::shared_ptr<zerograd::Tensor>& target_tensor,
+    std::size_t idx,
+    float h = 1e-3f
+)
+{
+    float original = target_tensor->data[idx];
+
+    target_tensor->data[idx] = original + h;
+    auto out_plus = compute_graph();
+    float f_plus = out_plus->data[0];
+
+    target_tensor->data[idx] = original - h;
+    auto out_minus = compute_graph();
+    float f_minus = out_minus->data[0];
+
+    target_tensor->data[idx] = original;
+
+    return (f_plus - f_minus) / (2.0f * h);
+}
+
+inline void zero_grad(const std::shared_ptr<zerograd::Tensor>& t)
+{
+    std::fill(t->grad.begin(), t->grad.end(), 0.0f);
+}
 
 TEST_CASE("Tensor Addition", "[tensor][forward][add]") {
     
@@ -576,5 +604,440 @@ TEST_CASE("Tensor Matmul", "[tensor][forward][matmul]") {
             std::vector<size_t>{3}
         );
         REQUIRE_THROWS_AS(matmul(t1, t2), std::runtime_error);
+    }
+}
+
+TEST_CASE("Tensor ReLU Forward", "[tensor][forward][relu]") {
+
+    SECTION("Positive values pass through") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f},
+            std::vector<size_t>{3}
+        );
+        auto result = relu(t);
+        for (size_t i = 0; i < 3; ++i)
+            REQUIRE(result->data[i] == Catch::Approx(t->data[i]));
+    }
+
+    SECTION("Negative values become zero") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{-1.0f, -2.0f, -3.0f},
+            std::vector<size_t>{3}
+        );
+        auto result = relu(t);
+        for (size_t i = 0; i < 3; ++i)
+            REQUIRE(result->data[i] == Catch::Approx(0.0f));
+    }
+
+    SECTION("Mixed values") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{-1.0f, 0.0f, 1.0f, -2.0f, 3.0f},
+            std::vector<size_t>{5}
+        );
+        auto result = relu(t);
+        std::vector<float> expected = {0.0f, 0.0f, 1.0f, 0.0f, 3.0f};
+        for (size_t i = 0; i < expected.size(); ++i)
+            REQUIRE(result->data[i] == Catch::Approx(expected[i]));
+    }
+
+    SECTION("2D tensor") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{-1.0f, 2.0f, -3.0f, 4.0f},
+            std::vector<size_t>{2, 2}
+        );
+        auto result = relu(t);
+        std::vector<float> expected = {0.0f, 2.0f, 0.0f, 4.0f};
+        for (size_t i = 0; i < expected.size(); ++i)
+            REQUIRE(result->data[i] == Catch::Approx(expected[i]));
+        REQUIRE(result->shape == std::vector<size_t>{2, 2});
+    }
+}
+
+TEST_CASE("Tensor ReLU Backward", "[tensor][backward][relu]") {
+
+    SECTION("Gradient passes through for positive, zero for negative") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{-1.0f, 2.0f, -3.0f, 4.0f},
+            std::vector<size_t>{4}, true
+        );
+        auto result = relu(t);
+        auto loss = sum(result);
+        loss->backward();
+
+        REQUIRE(t->grad[0] == Catch::Approx(0.0f));
+        REQUIRE(t->grad[1] == Catch::Approx(1.0f));
+        REQUIRE(t->grad[2] == Catch::Approx(0.0f));
+        REQUIRE(t->grad[3] == Catch::Approx(1.0f));
+    }
+
+    SECTION("Gradient check - relu") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{0.5f, 1.5f, 2.0f},
+            std::vector<size_t>{3}, true
+        );
+
+        auto forward = [&t]() { return sum(relu(t)); };
+
+        auto out = forward();
+        out->backward();
+
+        for (size_t i = 0; i < t->data.size(); ++i) {
+            float numerical = compute_tensor_numerical_gradient(forward, t, i);
+            REQUIRE(t->grad[i] == Catch::Approx(numerical).margin(1e-3f));
+        }
+    }
+}
+
+// ─── SIGMOID ─────────────────────────────────────────────────────────────────
+
+TEST_CASE("Tensor Sigmoid Forward", "[tensor][forward][sigmoid]") {
+
+    SECTION("Output in range (0, 1)") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{-2.0f, -1.0f, 0.0f, 1.0f, 2.0f},
+            std::vector<size_t>{5}
+        );
+        auto result = sigmoid(t);
+        for (size_t i = 0; i < result->data.size(); ++i) {
+            REQUIRE(result->data[i] > 0.0f);
+            REQUIRE(result->data[i] < 1.0f);
+        }
+    }
+
+    SECTION("sigmoid(0) = 0.5") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{0.0f},
+            std::vector<size_t>{1}
+        );
+        auto result = sigmoid(t);
+        REQUIRE(result->data[0] == Catch::Approx(0.5f));
+    }
+
+    SECTION("Known values") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, -1.0f},
+            std::vector<size_t>{2}
+        );
+        auto result = sigmoid(t);
+        REQUIRE(result->data[0] == Catch::Approx(1.0f / (1.0f + std::exp(-1.0f))));
+        REQUIRE(result->data[1] == Catch::Approx(1.0f / (1.0f + std::exp(1.0f))));
+    }
+
+    SECTION("Shape preserved") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},
+            std::vector<size_t>{2, 2}
+        );
+        auto result = sigmoid(t);
+        REQUIRE(result->shape == std::vector<size_t>{2, 2});
+    }
+}
+
+TEST_CASE("Tensor Sigmoid Backward", "[tensor][backward][sigmoid]") {
+
+    SECTION("Gradient check - sigmoid") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{-1.0f, 0.0f, 1.0f},
+            std::vector<size_t>{3}, true
+        );
+
+        auto forward = [&t]() { return sum(sigmoid(t)); };
+
+        auto out = forward();
+        out->backward();
+
+        for (size_t i = 0; i < t->data.size(); ++i) {
+            float numerical = compute_tensor_numerical_gradient(forward, t, i);
+            REQUIRE(t->grad[i] == Catch::Approx(numerical).margin(1e-3f));
+        }
+    }
+}
+
+// ─── TANH ────────────────────────────────────────────────────────────────────
+
+TEST_CASE("Tensor Tanh Forward", "[tensor][forward][tanh]") {
+
+    SECTION("tanh(0) = 0") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{0.0f},
+            std::vector<size_t>{1}
+        );
+        auto result = tanh(t);
+        REQUIRE(result->data[0] == Catch::Approx(0.0f));
+    }
+
+    SECTION("Output in range (-1, 1)") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{-5.0f, -1.0f, 0.0f, 1.0f, 5.0f},
+            std::vector<size_t>{5}
+        );
+        auto result = tanh(t);
+        for (size_t i = 0; i < result->data.size(); ++i) {
+            REQUIRE(result->data[i] > -1.0f);
+            REQUIRE(result->data[i] < 1.0f);
+        }
+    }
+
+    SECTION("Known values") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, -1.0f, 0.5f},
+            std::vector<size_t>{3}
+        );
+        auto result = tanh(t);
+        for (size_t i = 0; i < t->data.size(); ++i)
+            REQUIRE(result->data[i] == Catch::Approx(std::tanh(t->data[i])));
+    }
+
+    SECTION("Shape preserved") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},
+            std::vector<size_t>{2, 2}
+        );
+        auto result = tanh(t);
+        REQUIRE(result->shape == std::vector<size_t>{2, 2});
+    }
+}
+
+TEST_CASE("Tensor Tanh Backward", "[tensor][backward][tanh]") {
+
+    SECTION("Gradient check - tanh") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{-0.5f, 0.0f, 0.5f},
+            std::vector<size_t>{3}, true
+        );
+
+        auto forward = [&t]() { return sum(tanh(t)); };
+
+        auto out = forward();
+        out->backward();
+
+        for (size_t i = 0; i < t->data.size(); ++i) {
+            float numerical = compute_tensor_numerical_gradient(forward, t, i);
+            REQUIRE(t->grad[i] == Catch::Approx(numerical).margin(1e-3f));
+        }
+    }
+}
+
+// ─── SUM ─────────────────────────────────────────────────────────────────────
+
+TEST_CASE("Tensor Sum Forward", "[tensor][forward][sum]") {
+
+    SECTION("1D sum") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},
+            std::vector<size_t>{4}
+        );
+        auto result = sum(t);
+        REQUIRE(result->data[0] == Catch::Approx(10.0f));
+        REQUIRE(result->shape == std::vector<size_t>{});
+    }
+
+    SECTION("2D sum") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},
+            std::vector<size_t>{2, 2}
+        );
+        auto result = sum(t);
+        REQUIRE(result->data[0] == Catch::Approx(10.0f));
+    }
+
+    SECTION("Sum of negatives") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{-1.0f, -2.0f, -3.0f},
+            std::vector<size_t>{3}
+        );
+        auto result = sum(t);
+        REQUIRE(result->data[0] == Catch::Approx(-6.0f));
+    }
+
+    SECTION("Sum of zeros") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{0.0f, 0.0f, 0.0f},
+            std::vector<size_t>{3}
+        );
+        auto result = sum(t);
+        REQUIRE(result->data[0] == Catch::Approx(0.0f));
+    }
+}
+
+TEST_CASE("Tensor Sum Backward", "[tensor][backward][sum]") {
+
+    SECTION("Gradient flows equally to all elements") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},
+            std::vector<size_t>{4}, true
+        );
+        auto result = sum(t);
+        result->backward();
+
+        for (size_t i = 0; i < t->data.size(); ++i)
+            REQUIRE(t->grad[i] == Catch::Approx(1.0f));
+    }
+
+    SECTION("Gradient check - sum") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f},
+            std::vector<size_t>{3}, true
+        );
+
+        auto forward = [&t]() { return sum(t); };
+
+        auto out = forward();
+        out->backward();
+
+        for (size_t i = 0; i < t->data.size(); ++i) {
+            float numerical = compute_tensor_numerical_gradient(forward, t, i);
+            REQUIRE(t->grad[i] == Catch::Approx(numerical).margin(1e-3f));
+        }
+    }
+}
+
+// ─── MEAN ────────────────────────────────────────────────────────────────────
+
+TEST_CASE("Tensor Mean Forward", "[tensor][forward][mean]") {
+
+    SECTION("1D mean") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},
+            std::vector<size_t>{4}
+        );
+        auto result = mean(t);
+        REQUIRE(result->data[0] == Catch::Approx(2.5f));
+        REQUIRE(result->shape == std::vector<size_t>{});
+    }
+
+    SECTION("2D mean") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},
+            std::vector<size_t>{2, 2}
+        );
+        auto result = mean(t);
+        REQUIRE(result->data[0] == Catch::Approx(2.5f));
+    }
+
+    SECTION("Mean of identical values") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{3.0f, 3.0f, 3.0f},
+            std::vector<size_t>{3}
+        );
+        auto result = mean(t);
+        REQUIRE(result->data[0] == Catch::Approx(3.0f));
+    }
+}
+
+TEST_CASE("Tensor Mean Backward", "[tensor][backward][mean]") {
+
+    SECTION("Gradient divided equally") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},
+            std::vector<size_t>{4}, true
+        );
+        auto result = mean(t);
+        result->backward();
+
+        for (size_t i = 0; i < t->data.size(); ++i)
+            REQUIRE(t->grad[i] == Catch::Approx(0.25f));
+    }
+
+    SECTION("Gradient check - mean") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f},
+            std::vector<size_t>{3}, true
+        );
+
+        auto forward = [&t]() { return mean(t); };
+
+        auto out = forward();
+        out->backward();
+
+        for (size_t i = 0; i < t->data.size(); ++i) {
+            float numerical = compute_tensor_numerical_gradient(forward, t, i);
+            REQUIRE(t->grad[i] == Catch::Approx(numerical).margin(1e-3f));
+        }
+    }
+}
+
+// ─── INTEGRATION ─────────────────────────────────────────────────────────────
+
+TEST_CASE("Tensor Backward Integration", "[tensor][backward][integration]") {
+
+    SECTION("Chain: matmul -> relu -> sum") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, -1.0f, 2.0f, -2.0f},
+            std::vector<size_t>{2, 2}, true
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 0.0f, 0.0f, 1.0f},
+            std::vector<size_t>{2, 2}, true
+        );
+
+        auto forward = [&t1, &t2]() {
+            return sum(relu(matmul(t1, t2)));
+        };
+
+        auto out = forward();
+        out->backward();
+
+        for (size_t i = 0; i < t1->data.size(); ++i) {
+            float numerical = compute_tensor_numerical_gradient(forward, t1, i);
+            REQUIRE(t1->grad[i] == Catch::Approx(numerical).margin(1e-3f));
+        }
+    }
+
+    SECTION("Chain: matmul -> tanh -> mean") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{0.5f, -0.5f, 1.0f, -1.0f},
+            std::vector<size_t>{2, 2}, true
+        );
+        auto t2 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},
+            std::vector<size_t>{2, 2}, true
+        );
+
+        auto forward = [&t1, &t2]() {
+            return mean(tanh(matmul(t1, t2)));
+        };
+
+        auto out = forward();
+        out->backward();
+
+        for (size_t i = 0; i < t1->data.size(); ++i) {
+            float numerical = compute_tensor_numerical_gradient(forward, t1, i);
+            REQUIRE(t1->grad[i] == Catch::Approx(numerical).margin(1e-3f));
+        }
+    }
+
+    SECTION("requires_grad=false - grads stay zero throughout chain") {
+        auto t1 = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},
+            std::vector<size_t>{2, 2}, false
+        );
+
+        auto result = sum(relu(t1));
+        result->backward();
+
+        for (size_t i = 0; i < t1->grad.size(); ++i)
+            REQUIRE(t1->grad[i] == Catch::Approx(0.0f));
+    }
+}
+
+TEST_CASE("Broadcast Backward Gradient Check", "[tensor][backward][broadcast]") {
+    auto t1 = std::make_shared<zerograd::Tensor>(
+        std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f},
+        std::vector<size_t>{2, 3}, true
+    );
+    auto t2 = std::make_shared<zerograd::Tensor>(
+        std::vector<float>{0.5f, -0.3f, 1.2f},
+        std::vector<size_t>{3}, true
+    );
+
+    auto forward = [&t1, &t2]() { return sum(t1 * t2); };
+
+    auto out = forward();
+    out->backward();
+
+    for (size_t i = 0; i < t2->data.size(); ++i) {
+        float numerical = compute_tensor_numerical_gradient(forward, t2, i);
+        REQUIRE(t2->grad[i] == Catch::Approx(numerical).margin(1e-3f));
     }
 }
