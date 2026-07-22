@@ -597,6 +597,50 @@ namespace zerograd
         return result;
     }
 
+    std::shared_ptr<Tensor> transpose(const std::shared_ptr<Tensor>& tensor)
+    {
+        if (tensor->shape.size() != 2) {
+            throw std::runtime_error("Transpose can only be called on a 2D tensor");
+        }
+
+        std::vector<std::size_t> result_shape = {tensor->shape[1], tensor->shape[0]};
+        std::vector<float> result_data(tensor->data.size());
+        bool result_requires_grad = tensor->requires_grad;
+
+        for (std::size_t i{}; i < tensor->shape[0]; ++i) {
+            for (std::size_t j{}; j < tensor->shape[1]; ++j) {
+                std::size_t src_idx = (i * tensor->strides[0]) + (j * tensor->strides[1]);
+                std::size_t dest_idx = (j * tensor->shape[0]) + i;
+                result_data[dest_idx] = tensor->data[src_idx];
+            }
+        }
+
+        std::string op = "transpose";
+
+        auto result = std::make_shared<Tensor>(
+            result_data, 
+            result_shape, 
+            result_requires_grad,
+            std::vector<std::shared_ptr<Tensor>>{tensor},
+            op
+        );
+
+        result->_backward = [tensor, out = result.get()]() {
+            if (tensor->requires_grad) {
+                for (std::size_t i{}; i < tensor->shape[0]; ++i) {
+                    for (std::size_t j{}; j < tensor->shape[1]; ++j) {
+                        std::size_t src_idx = (i * tensor->strides[0]) + (j * tensor->strides[1]);
+                        std::size_t dest_idx = (j * tensor->shape[0]) + i;
+
+                        tensor->grad[src_idx] += out->grad[dest_idx];
+                    }
+                }
+            }
+        };
+
+        return result;
+    }
+
     void Tensor::build_topo(
             const std::shared_ptr<Tensor>& node,
             std::vector<std::shared_ptr<Tensor>>& topo,

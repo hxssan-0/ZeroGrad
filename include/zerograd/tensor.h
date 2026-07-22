@@ -22,7 +22,6 @@ namespace zerograd
         static std::vector<std::size_t> compute_padded_strides(const std::vector<std::size_t>& strides, std::size_t result_shape_size, const std::vector<std::size_t>& shape_padded);
         static std::vector<std::size_t> convert_flat_to_multi_index(std::size_t flat_idx, const std::vector<std::size_t>& shape);
         static std::size_t convert_multi_to_flat_index(const std::vector<std::size_t>& multi_idx, const std::vector<std::size_t>& strides);
-        static std::size_t calculate_total_elements(const std::vector<std::size_t>& shape);
 
         static float compute_sigmoid(float x);
 
@@ -37,6 +36,8 @@ namespace zerograd
         std::vector<std::size_t> shape;
         std::vector<std::size_t> strides;
         std::vector<float> grad;
+
+        static std::size_t calculate_total_elements(const std::vector<std::size_t>& shape);
 
         explicit Tensor(
             std::vector<float> data,
@@ -59,6 +60,8 @@ namespace zerograd
 
         friend std::shared_ptr<Tensor> sum(const std::shared_ptr<Tensor>& tensor);
         friend std::shared_ptr<Tensor> mean(const std::shared_ptr<Tensor>& tensor);
+
+        friend std::shared_ptr<Tensor> transpose(const std::shared_ptr<Tensor>& tensor);
 
         void backward();
 
