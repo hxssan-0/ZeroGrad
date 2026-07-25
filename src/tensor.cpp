@@ -641,6 +641,94 @@ namespace zerograd
         return result;
     }
 
+    std::shared_ptr<Tensor> max(const std::shared_ptr<Tensor>& tensor)
+    {
+        auto max_it = std::max_element(tensor->data.begin(), tensor->data.end());
+        std::size_t max_idx = std::distance(tensor->data.begin(), max_it);
+
+        std::vector<std::size_t> result_shape = {};
+        std::vector<float> result_data = {tensor->data[max_idx]};
+        bool result_requires_grad = tensor->requires_grad;
+        std::string op = "max";
+
+        auto result = std::make_shared<Tensor>(
+            result_data, 
+            result_shape, 
+            result_requires_grad,
+            std::vector<std::shared_ptr<Tensor>>{tensor},
+            op
+        );
+
+        result->_backward = [tensor, out = result.get(), max_idx]() {
+            if (tensor->requires_grad) {
+                tensor->grad[max_idx] += out->grad[0];
+            }
+        };
+
+        return result;
+    }
+
+    std::shared_ptr<Tensor> log(const std::shared_ptr<Tensor>& tensor)
+    {
+        // to handle cases when x=0
+        float epsilon = 1e-8;
+
+        std::vector<float> result_data(tensor->data.size());
+        
+        for (std::size_t i{}; i < result_data.size(); ++i) {
+            result_data[i] = std::log(tensor->data[i] + epsilon);
+        }
+
+        std::string op = "log";
+
+        auto result = std::make_shared<Tensor>(
+            result_data, 
+            tensor->shape, 
+            tensor->requires_grad,
+            std::vector<std::shared_ptr<Tensor>>{tensor},
+            op
+        );
+
+        result->_backward = [tensor, out = result.get(), epsilon]() {
+            if (tensor->requires_grad) {
+                for (std::size_t i{}; i < tensor->grad.size(); ++i) {
+                    tensor->grad[i] += (1.0f / (tensor->data[i] + epsilon)) * out->grad[i];
+                }
+            }
+        };
+
+        return result;
+    }
+
+    std::shared_ptr<Tensor> exp(const std::shared_ptr<Tensor>& tensor)
+    {
+        std::vector<float> result_data(tensor->data.size());
+        
+        for (std::size_t i{}; i < result_data.size(); ++i) {
+            result_data[i] = std::exp(tensor->data[i]);
+        }
+
+        std::string op = "exp";
+
+        auto result = std::make_shared<Tensor>(
+            result_data, 
+            tensor->shape, 
+            tensor->requires_grad,
+            std::vector<std::shared_ptr<Tensor>>{tensor},
+            op
+        );
+
+        result->_backward = [tensor, out = result.get()]() {
+            if (tensor->requires_grad) {
+                for (std::size_t i{}; i < tensor->grad.size(); ++i) {
+                    tensor->grad[i] += out->data[i] * out->grad[i];
+                }
+            }
+        };
+
+        return result;
+    }
+
     void Tensor::build_topo(
             const std::shared_ptr<Tensor>& node,
             std::vector<std::shared_ptr<Tensor>>& topo,
@@ -675,6 +763,85 @@ namespace zerograd
             (*it)->_backward();
         }
     }
+
+    std::shared_ptr<Tensor> mse_loss(const std::shared_ptr<Tensor>& prediction, const std::shared_ptr<Tensor>& target)
+    {
+        auto diff = prediction - target;
+        auto squared = diff * diff;
+        auto mse = mean(squared);
+
+        return mse;
+    }
+
+    std::shared_ptr<Tensor> ce_loss(const std::shared_ptr<Tensor>& logits, const std::vector<std::size_t>& target_classes)
+    {
+        if (logits->shape.size() != 2)
+        throw std::runtime_error("ce_loss requires logits of shape (batch, num_classes)");
+
+        std::size_t batch = logits->shape[0];
+        std::size_t classes = logits->shape[1];
+
+        if (target_classes.size() != batch)
+            throw std::runtime_error("target_classes size must match batch size");
+
+        std::vector<float> softmax_data(batch * classes);
+        float total_loss = 0.0f;
+
+        for (std::size_t i{}; i < batch; ++i) {
+            std::size_t row_start = i * logits->strides[0];
+
+            // log-sum-exp trick, per row
+            float max_val = logits->data[row_start];
+            for (std::size_t j = 1; j < classes; ++j) {
+                float val = logits->data[row_start + j * logits->strides[1]];
+                if (val > max_val) max_val = val;
+            }
+
+            float sum_exp = 0.0f;
+            for (std::size_t j{}; j < classes; ++j) {
+                float val = logits->data[row_start + j * logits->strides[1]];
+                sum_exp += std::exp(val - max_val);
+            }
+            float log_sum_exp = max_val + std::log(sum_exp);
+
+            float x_target = logits->data[row_start + target_classes[i] * logits->strides[1]];
+            total_loss += (log_sum_exp - x_target);
+
+            for (std::size_t j{}; j < classes; ++j) {
+                float val = logits->data[row_start + j * logits->strides[1]];
+                softmax_data[i * classes + j] = std::exp(val - log_sum_exp);
+            }
+        }
+
+        float mean_loss = total_loss / static_cast<float>(batch);
+
+        auto result = std::make_shared<Tensor>(
+            std::vector<float>{mean_loss},
+            std::vector<std::size_t>{},
+            logits->requires_grad,
+            std::vector<std::shared_ptr<Tensor>>{logits},
+            "cross_entropy"
+        );
+
+        result->_backward = [logits, out = result.get(), softmax_data, target_classes, batch, classes]() {
+            if (logits->requires_grad) {
+                for (std::size_t i{}; i < batch; ++i) {
+                    std::size_t row_start = i * logits->strides[0];
+                    for (std::size_t j{}; j < classes; ++j) {
+                        float grad_val = softmax_data[i * classes + j];
+                        if (j == target_classes[i]) {
+                            grad_val -= 1.0f;
+                        }
+                        logits->grad[row_start + j * logits->strides[1]] +=
+                            (grad_val / static_cast<float>(batch)) * out->grad[0];
+                    }
+                }
+            }
+        };
+
+        return result;
+    }
+        
 
     std::shared_ptr<Tensor> operator+(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right)
     {

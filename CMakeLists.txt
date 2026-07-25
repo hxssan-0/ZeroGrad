@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # ====== The C++ Setup ======
-add_library(zerograd_core src/scalar.cpp src/tensor.cpp src/linear.cpp src/sequential.cpp)
+add_library(zerograd_core src/scalar.cpp src/tensor.cpp src/linear.cpp src/sequential.cpp src/optimizer.cpp)
 
 set_target_properties(zerograd_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
@@ -25,7 +25,7 @@ FetchContent_MakeAvailable(Catch2)
 
 enable_testing()
 
-add_executable(zerograd_tests tests/test_scalar.cpp tests/test_tensor.cpp)
+add_executable(zerograd_tests tests/test_scalar.cpp tests/test_tensor.cpp tests/test_sgd.cpp tests/test_loss.cpp tests/test_integration.cpp)
 
 target_link_libraries(zerograd_tests PRIVATE Catch2::Catch2WithMain zerograd_core)
 

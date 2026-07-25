@@ -53,6 +53,8 @@ namespace zerograd
         friend std::shared_ptr<Tensor> sub(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right);
         friend std::shared_ptr<Tensor> mul(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right);
         friend std::shared_ptr<Tensor> matmul(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right);
+        friend std::shared_ptr<Tensor> log(const std::shared_ptr<Tensor>& tensor);
+        friend std::shared_ptr<Tensor> exp(const std::shared_ptr<Tensor>& tensor);
 
         friend std::shared_ptr<Tensor> relu(const std::shared_ptr<Tensor>& tensor);
         friend std::shared_ptr<Tensor> sigmoid(const std::shared_ptr<Tensor>& tensor);
@@ -63,12 +65,16 @@ namespace zerograd
 
         friend std::shared_ptr<Tensor> transpose(const std::shared_ptr<Tensor>& tensor);
 
+        friend std::shared_ptr<Tensor> max(const std::shared_ptr<Tensor>& tensor);
+
         void backward();
 
         friend std::shared_ptr<Tensor> operator+(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right);
         friend std::shared_ptr<Tensor> operator-(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right);
         friend std::shared_ptr<Tensor> operator*(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right);
 
+        friend std::shared_ptr<Tensor> mse_loss(const std::shared_ptr<Tensor>& prediction, const std::shared_ptr<Tensor>& target);
+        friend std::shared_ptr<Tensor> ce_loss(const std::shared_ptr<Tensor>& logits, const std::vector<std::size_t>& target_classes);
     };
 }
 
