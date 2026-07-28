@@ -26,12 +26,12 @@ int main()
     std::size_t batch_size = 64;
     zerograd::DataLoader train_loader(train_data, batch_size);
 
-    float lr = 1e-3;
+    float lr = 1e-1;
     zerograd::Optimizer optimizer(mlp.parameters(), lr);
 
     // TRAINING LOOP
     std::cout << "====== BEGINNING TRAINING LOOP ======\n";
-    constexpr int NUM_EPOCHS = 5;
+    constexpr int NUM_EPOCHS = 15;
     for (int epoch{}; epoch < NUM_EPOCHS; ++epoch) {
         float running_loss{};
         std::cout << "========= EPOCH #" << epoch+1 << " =============\n"; 
