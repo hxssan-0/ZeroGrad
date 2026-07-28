@@ -48,6 +48,7 @@ namespace zerograd
 
     MNISTData load_mnist(const std::string& images_path, const std::string& labels_path)
     {
+        std::cout << "================================================\n";
         std::ifstream images_file(images_path, std::ios::binary);
         std::ifstream labels_file(labels_path, std::ios::binary);
 
@@ -129,6 +130,8 @@ namespace zerograd
 
         images_file.close();
         labels_file.close();
+
+        std::cout << "================================================\n";
 
         return mnist_data;
     }

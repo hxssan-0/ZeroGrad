@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 project(ZeroGrad VERSION 0.1.0 LANGUAGES CXX)
 
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -ffast-math")
+endif()
+
 # Enforcing C++20 and turning off compiler specific extensions
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -49,6 +53,12 @@ add_executable(verify_mnist
 )
 
 target_link_libraries(verify_mnist PRIVATE zerograd_core)
+
+add_executable(train_mnist
+    tools/train_mnist.cpp
+)
+
+target_link_libraries(train_mnist PRIVATE zerograd_core)
 
 include(Catch)
 catch_discover_tests(zerograd_tests)

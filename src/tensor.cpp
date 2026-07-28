@@ -362,91 +362,127 @@ namespace zerograd
     std::shared_ptr<Tensor> matmul(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right)
     {
         if (left->shape.size() < 2 || right->shape.size() < 2) {
-            throw std::runtime_error("matmul requires tensors to have a minimum rank of 2.");
+            throw std::runtime_error("Matmul requires tensors of rank >= 2.");
         }
 
-        // consider left has last 2 dims (M, K) and right has last 2 dims (K, N)
-        std::size_t M = left->shape[left->shape.size() - 2];
-        std::size_t K_left = left->shape[left->shape.size() - 1];
-        std::size_t K_right = right->shape[right->shape.size() - 2];
-        std::size_t N = right->shape[right->shape.size() - 1];
+        std::size_t left_rank = left->shape.size();
+        std::size_t right_rank = right->shape.size();
 
-        if (K_left != K_right) {
-            throw std::runtime_error("dimensions incompatible for matmul.");
+        std::size_t M = left->shape[left_rank - 2];
+        std::size_t K = left->shape[left_rank - 1];
+        std::size_t N = right->shape[right_rank - 1];
+
+        if (right->shape[right_rank - 2] != K) {
+            throw std::runtime_error("Incompatible matrix dimensions for matmul.");
         }
-        std::size_t K = K_left;
 
+        // 1. Separate batch dimensions from 2D matrix dimensions
         std::vector<std::size_t> left_batch(left->shape.begin(), left->shape.end() - 2);
         std::vector<std::size_t> right_batch(right->shape.begin(), right->shape.end() - 2);
-        std::vector<std::size_t> result_shape = Tensor::compute_broadcast_shape(left_batch, right_batch);
-        result_shape.push_back(M); result_shape.push_back(N);
+        std::vector<std::size_t> res_batch = Tensor::compute_broadcast_shape(left_batch, right_batch);
 
-        std::size_t total_elements = Tensor::calculate_total_elements(result_shape);
+        std::vector<std::size_t> result_shape = res_batch;
+        result_shape.push_back(M);
+        result_shape.push_back(N);
+
+        std::size_t num_batches = Tensor::calculate_total_elements(res_batch);
+        if (res_batch.empty()) num_batches = 1;
+
+        std::size_t total_elements = num_batches * M * N;
         std::vector<float> result_data(total_elements, 0.0f);
 
-        std::vector<std::size_t> left_shape_padded = Tensor::pad_shape(left->shape, result_shape.size());
-        std::vector<std::size_t> right_shape_padded = Tensor::pad_shape(right->shape, result_shape.size());
+        // 2. Compute strides for batch and 2D components
+        std::vector<std::size_t> left_padded_shape = Tensor::pad_shape(left->shape, result_shape.size());
+        std::vector<std::size_t> right_padded_shape = Tensor::pad_shape(right->shape, result_shape.size());
 
-        std::vector<std::size_t> left_strides_padded = Tensor::compute_padded_strides(
-            left->strides, result_shape.size(), left_shape_padded
+        std::vector<std::size_t> left_padded_strides = Tensor::compute_padded_strides(
+            left->strides, result_shape.size(), left_padded_shape
+        );
+        std::vector<std::size_t> right_padded_strides = Tensor::compute_padded_strides(
+            right->strides, result_shape.size(), right_padded_shape
         );
 
-        std::vector<std::size_t> right_strides_padded = Tensor::compute_padded_strides(
-            right->strides, result_shape.size(), right_shape_padded
-        );
+        std::size_t l_stride_M = left_padded_strides[result_shape.size() - 2];
+        std::size_t l_stride_K = left_padded_strides[result_shape.size() - 1];
+        std::size_t r_stride_K = right_padded_strides[result_shape.size() - 2];
+        std::size_t r_stride_N = right_padded_strides[result_shape.size() - 1];
 
-        // forward pass
-        for (std::size_t i{}; i < total_elements; ++i) {
-            std::vector<std::size_t> multi_idx = Tensor::convert_flat_to_multi_index(i, result_shape);
-            std::size_t row = multi_idx[result_shape.size() - 2];
-            std::size_t col = multi_idx[result_shape.size() - 1];
+        for (std::size_t b = 0; b < num_batches; ++b) {
+            std::size_t l_batch_offset = 0;
+            std::size_t r_batch_offset = 0;
 
-            float dot_product = 0.0f;
-            for (std::size_t k{}; k < K; ++k) {
-                auto l_lookup = multi_idx;
-                l_lookup[result_shape.size() - 1] = k;
-
-                auto r_lookup = multi_idx;
-                r_lookup[result_shape.size() - 2] = k;
-
-                std::size_t l_flat = Tensor::convert_multi_to_flat_index(l_lookup, left_strides_padded);
-                std::size_t r_flat = Tensor::convert_multi_to_flat_index(r_lookup, right_strides_padded);
-
-                dot_product += left->data[l_flat] * right->data[r_flat];
+            if (!res_batch.empty()) {
+                std::vector<std::size_t> batch_multi_idx = Tensor::convert_flat_to_multi_index(b, res_batch);
+                for (std::size_t dim = 0; dim < res_batch.size(); ++dim) {
+                    l_batch_offset += batch_multi_idx[dim] * left_padded_strides[dim];
+                    r_batch_offset += batch_multi_idx[dim] * right_padded_strides[dim];
+                }
             }
-            result_data[i] = dot_product;
+
+            std::size_t out_batch_offset = b * M * N;
+
+            for (std::size_t i = 0; i < M; ++i) {
+                std::size_t l_row_offset = l_batch_offset + i * l_stride_M;
+                std::size_t out_row_offset = out_batch_offset + i * N;
+
+                for (std::size_t j = 0; j < N; ++j) {
+                    std::size_t r_col_offset = r_batch_offset + j * r_stride_N;
+                    float dot_product = 0.0f;
+
+                    for (std::size_t k = 0; k < K; ++k) {
+                        dot_product += left->data[l_row_offset + k * l_stride_K] * 
+                                    right->data[r_col_offset + k * r_stride_K];
+                    }
+                    result_data[out_row_offset + j] = dot_product;
+                }
+            }
         }
-        
+
         bool requires_grad = left->requires_grad || right->requires_grad;
         auto result = std::make_shared<Tensor>(
-            result_data, 
-            result_shape, 
-            requires_grad, 
-            std::vector<std::shared_ptr<Tensor>>{left, right}, 
-            "@"
+            result_data, result_shape, requires_grad,
+            std::vector<std::shared_ptr<Tensor>>{left, right}, "matmul"
         );
 
-        result->_backward = [left, right, out = result.get(), left_strides_padded, right_strides_padded, result_shape, K]() {
-            for (std::size_t i = 0; i < out->grad.size(); ++i) {
-                std::vector<std::size_t> multi_idx = Tensor::convert_flat_to_multi_index(i, result_shape);
-                std::size_t row = multi_idx[result_shape.size() - 2];
-                std::size_t col = multi_idx[result_shape.size() - 1];
+        result->_backward = [left, right, out = result.get(), num_batches, res_batch, 
+                            M, N, K, l_stride_M, l_stride_K, r_stride_K, r_stride_N,
+                            left_padded_strides, right_padded_strides]() {
+            
+            for (std::size_t b = 0; b < num_batches; ++b) {
+                std::size_t l_batch_offset = 0;
+                std::size_t r_batch_offset = 0;
 
-                for (std::size_t k = 0; k < K; ++k) {
-                    auto l_lookup = multi_idx;
-                    l_lookup[result_shape.size() - 1] = k;
-
-                    auto r_lookup = multi_idx;
-                    r_lookup[result_shape.size() - 2] = k;
-
-                    std::size_t l_flat = Tensor::convert_multi_to_flat_index(l_lookup, left_strides_padded);
-                    std::size_t r_flat = Tensor::convert_multi_to_flat_index(r_lookup, right_strides_padded);
-
-                    if (left->requires_grad) {
-                        left->grad[l_flat] += out->grad[i] * right->data[r_flat];
+                if (!res_batch.empty()) {
+                    std::vector<std::size_t> batch_multi_idx = Tensor::convert_flat_to_multi_index(b, res_batch);
+                    for (std::size_t dim = 0; dim < res_batch.size(); ++dim) {
+                        l_batch_offset += batch_multi_idx[dim] * left_padded_strides[dim];
+                        r_batch_offset += batch_multi_idx[dim] * right_padded_strides[dim];
                     }
-                    if (right->requires_grad) {
-                        right->grad[r_flat] += left->data[l_flat] * out->grad[i];
+                }
+
+                std::size_t out_batch_offset = b * M * N;
+
+                for (std::size_t i = 0; i < M; ++i) {
+                    std::size_t l_row_offset = l_batch_offset + i * l_stride_M;
+                    std::size_t out_row_offset = out_batch_offset + i * N;
+
+                    for (std::size_t j = 0; j < N; ++j) {
+                        float grad_out = out->grad[out_row_offset + j];
+                        if (grad_out == 0.0f) continue;
+
+                        std::size_t r_col_offset = r_batch_offset + j * r_stride_N;
+
+                        for (std::size_t k = 0; k < K; ++k) {
+                            std::size_t l_idx = l_row_offset + k * l_stride_K;
+                            std::size_t r_idx = r_col_offset + k * r_stride_K;
+
+                            if (left->requires_grad) {
+                                left->grad[l_idx] += grad_out * right->data[r_idx];
+                            }
+                            if (right->requires_grad) {
+                                right->grad[r_idx] += left->data[l_idx] * grad_out;
+                            }
+                        }
                     }
                 }
             }
