@@ -1,6 +1,9 @@
 #include <zerograd/data/mnist.h>
 #include <fstream>
 #include <iostream>
+#include <numeric>
+#include <algorithm>
+#include <random>
 
 #define MAGIC_NUMBER_BYTES 4
 
@@ -132,6 +135,52 @@ namespace zerograd
 
     MNISTData::MNISTData(std::vector<float> images, std::vector<uint8_t> labels, std::size_t num_samples, std::size_t image_size)
         : images(std::move(images)), labels(std::move(labels)), num_samples(num_samples), image_size(image_size)
-        {
+    {
+    }
+
+    DataLoader::DataLoader(MNISTData data, std::size_t batch_size) : data(std::move(data)), indices(this->data.num_samples),
+     batch_size(batch_size), current_pos(0)
+    {
+        if (batch_size > this->data.num_samples) {
+            throw std::invalid_argument("Batch size can not be greater than the number of samples\n");
         }
+        std::iota(indices.begin(), indices.end(), 0);
+    }
+
+    void DataLoader::shuffle()
+    {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::shuffle(indices.begin(), indices.end(), gen);
+    }
+
+    bool DataLoader::has_next()
+    {
+        return (current_pos + batch_size <= data.num_samples);
+    }
+
+    void DataLoader::reset()
+    {
+        current_pos = 0;
+    }
+
+    std::pair<std::shared_ptr<Tensor>, std::vector<std::size_t>> DataLoader::next_batch()
+    {
+        std::vector<float> image_data(batch_size * data.image_size);
+        std::vector<std::size_t> labels(batch_size);
+        std::vector<std::size_t> image_tensor_shape = {batch_size, data.image_size};
+
+        for (std::size_t i{}; i < batch_size; ++i) {
+            std::size_t idx = indices[current_pos + i];
+            for (std::size_t j{}; j < data.image_size; ++j) {
+                image_data[i * data.image_size + j] = data.images[idx * data.image_size + j];
+            }
+            labels[i] = static_cast<std::size_t>(data.labels[idx]);
+        }
+        current_pos += batch_size;
+        std::shared_ptr<Tensor> image_tensor = std::make_shared<Tensor>(image_data, image_tensor_shape, true);
+
+        std::pair<std::shared_ptr<Tensor>, std::vector<std::size_t>> batch = {image_tensor, labels};
+        return batch;
+    }
 }
