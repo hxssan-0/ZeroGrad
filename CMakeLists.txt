@@ -75,4 +75,7 @@ pybind11_add_module(zerograd_bindings bindings/bindings.cpp)
 
 target_link_libraries(zerograd_bindings PRIVATE zerograd_core)
 
-set_target_properties(zerograd_bindings PROPERTIES OUTPUT_NAME "_zerograd_backend")
+set_target_properties(zerograd_bindings PROPERTIES 
+    OUTPUT_NAME "_zerograd_backend"
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/python
+)

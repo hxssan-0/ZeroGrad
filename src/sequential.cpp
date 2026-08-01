@@ -24,7 +24,7 @@ namespace zerograd
         return all_params;
     }
 
-    void Sequential::add(std::unique_ptr<Layer> layer)
+    void Sequential::add(std::shared_ptr<Layer> layer)
     {
         layers.push_back(std::move(layer));
     }

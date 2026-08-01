@@ -19,9 +19,9 @@ int main()
     );
 
     zerograd::Sequential mlp;
-    mlp.add(std::make_unique<zerograd::Linear>(784, 128));
-    mlp.add(std::make_unique<zerograd::ReLU>());
-    mlp.add(std::make_unique<zerograd::Linear>(128, 10));
+    mlp.add(std::make_shared<zerograd::Linear>(784, 128));
+    mlp.add(std::make_shared<zerograd::ReLU>());
+    mlp.add(std::make_shared<zerograd::Linear>(128, 10));
 
     std::size_t batch_size = 64;
     zerograd::DataLoader train_loader(train_data, batch_size);

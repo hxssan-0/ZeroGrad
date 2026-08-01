@@ -10,9 +10,9 @@ TEST_CASE("Training loop check - loss decreases", "[integration]") {
 
     SECTION("Tiny MLP overfits a single MSE example") {
         zerograd::Sequential model;
-        model.add(std::make_unique<zerograd::Linear>(2, 4));
-        model.add(std::make_unique<zerograd::ReLU>());
-        model.add(std::make_unique<zerograd::Linear>(4, 1));
+        model.add(std::make_shared<zerograd::Linear>(2, 4));
+        model.add(std::make_shared<zerograd::ReLU>());
+        model.add(std::make_shared<zerograd::Linear>(4, 1));
 
         auto input = std::make_shared<zerograd::Tensor>(
             std::vector<float>{1.0f, 2.0f},
@@ -44,9 +44,9 @@ TEST_CASE("Training loop check - loss decreases", "[integration]") {
 
     SECTION("Tiny classifier overfits a single CE example") {
         zerograd::Sequential model;
-        model.add(std::make_unique<zerograd::Linear>(3, 8));
-        model.add(std::make_unique<zerograd::ReLU>());
-        model.add(std::make_unique<zerograd::Linear>(8, 3));
+        model.add(std::make_shared<zerograd::Linear>(3, 8));
+        model.add(std::make_shared<zerograd::ReLU>());
+        model.add(std::make_shared<zerograd::Linear>(8, 3));
 
         auto input = std::make_shared<zerograd::Tensor>(
             std::vector<float>{0.5f, -0.3f, 1.2f},
