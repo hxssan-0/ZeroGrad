@@ -1,11 +1,35 @@
-# ZeroGrad 
+# ZeroGrad
 
-A custom autograd engine and static memory planner built in C++20 from scratch.
+A custom autograd engine and static memory planner built in C++20 from scratch, with Python bindings.
 
-## Project Goals
-For now, following are the major goals of the project:
+## Goals
 
-1. To implement Scalar and Tensor classes and be able to run neural network training loops using
-   gradient descent.
-2. To make the engine richer with the ability to work on convolutional neural networks.
-3. To implement an arena allocator and experiment with different static memory planning algorithms.
+1. Core autograd engine (`Scalar`/`Tensor`, reverse-mode autodiff) **COMPLETE**
+2. CNN support (Conv2d, BatchNorm, pooling)
+3. Arena allocator + static memory planner
+4. Benchmarks vs PyTorch + report
+
+## Status
+
+Phase 1 complete : MNIST trained in both C++ ad Python with a 97%+ accuracy.
+
+## Build
+
+```bash
+mkdir build && cd build
+cmake -DCMAKE_BUILD_TYPE=Release ..
+cmake --build .
+```
+
+## Test
+
+```bash
+ctest
+```
+
+## Train
+
+```bash
+./train_mnist
+PYTHONPATH=build/python python3 python/zerograd/train_mnist.py
+```
