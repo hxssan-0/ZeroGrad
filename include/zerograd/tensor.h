@@ -59,11 +59,23 @@ namespace zerograd
         friend std::shared_ptr<Tensor> relu(const std::shared_ptr<Tensor>& tensor);
         friend std::shared_ptr<Tensor> sigmoid(const std::shared_ptr<Tensor>& tensor);
         friend std::shared_ptr<Tensor> tanh(const std::shared_ptr<Tensor>& tensor);
+        friend std::shared_ptr<Tensor> softmax(const std::shared_ptr<Tensor>& tensor);
 
         friend std::shared_ptr<Tensor> sum(const std::shared_ptr<Tensor>& tensor);
         friend std::shared_ptr<Tensor> mean(const std::shared_ptr<Tensor>& tensor);
 
         friend std::shared_ptr<Tensor> transpose(const std::shared_ptr<Tensor>& tensor);
+
+        friend std::shared_ptr<Tensor> batchNorm1d(
+            const std::shared_ptr<Tensor>& input,
+            const std::shared_ptr<Tensor>& gamma,
+            const std::shared_ptr<Tensor>& beta,
+            std::shared_ptr<Tensor>& running_mean,
+            std::shared_ptr<Tensor>& running_var,
+            bool training = true,
+            float momentum = 0.1f,
+            float epsilon = 1e-5f
+        );
 
         friend std::shared_ptr<Tensor> max(const std::shared_ptr<Tensor>& tensor);
 
@@ -86,9 +98,20 @@ namespace zerograd
     std::shared_ptr<Tensor> relu(const std::shared_ptr<Tensor>& tensor);
     std::shared_ptr<Tensor> sigmoid(const std::shared_ptr<Tensor>& tensor);
     std::shared_ptr<Tensor> tanh(const std::shared_ptr<Tensor>& tensor);
+    std::shared_ptr<Tensor> softmax(const std::shared_ptr<Tensor>& tensor);
     std::shared_ptr<Tensor> sum(const std::shared_ptr<Tensor>& tensor);
     std::shared_ptr<Tensor> mean(const std::shared_ptr<Tensor>& tensor);
     std::shared_ptr<Tensor> transpose(const std::shared_ptr<Tensor>& tensor);
+    std::shared_ptr<Tensor> batchNorm1d(
+        const std::shared_ptr<Tensor>& input,
+        const std::shared_ptr<Tensor>& gamma,
+        const std::shared_ptr<Tensor>& beta,
+        std::shared_ptr<Tensor>& running_mean,
+        std::shared_ptr<Tensor>& running_var,
+        bool training = true,
+        float momentum = 0.1f,
+        float epsilon = 1e-5f
+    );
     std::shared_ptr<Tensor> max(const std::shared_ptr<Tensor>& tensor);
     std::shared_ptr<Tensor> mse_loss(const std::shared_ptr<Tensor>& prediction, const std::shared_ptr<Tensor>& target);
     std::shared_ptr<Tensor> ce_loss(const std::shared_ptr<Tensor>& logits, const std::vector<std::size_t>& target_classes);

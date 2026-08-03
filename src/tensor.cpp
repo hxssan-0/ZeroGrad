@@ -577,6 +577,67 @@ namespace zerograd
         return result;
     }
 
+    std::shared_ptr<Tensor> softmax(const std::shared_ptr<Tensor>& tensor)
+    {
+        if (tensor->shape.size() != 2)
+            throw std::runtime_error("softmax requires a 2D tensor (batch, classes)");
+
+        std::size_t batch = tensor->shape[0];
+        std::size_t classes = tensor->shape[1];
+
+        std::vector<float> result_data(tensor->data.size());
+
+        for (std::size_t b{}; b < batch; ++b) {
+            std::size_t row_start = b * classes;
+
+            float max_val = tensor->data[row_start];
+            for (std::size_t j{1}; j < classes; ++j) {
+                max_val = std::max(tensor->data[row_start + j], max_val);
+            }
+            
+            float sum { 0.0f };
+            for (std::size_t j{}; j < classes; ++j) {
+                float e = std::exp(tensor->data[row_start + j] - max_val);
+                result_data[row_start + j] = e;
+                sum += e;
+            }
+
+            for (std::size_t j{}; j < classes; ++j) {
+                result_data[row_start + j] /= sum;
+            }
+        }
+
+        auto result = std::make_shared<Tensor>(
+            result_data,
+            tensor->shape,
+            tensor->requires_grad,
+            std::vector<std::shared_ptr<Tensor>>{tensor},
+            "softmax"
+        );
+
+        result->_backward = [tensor, out = result.get(), batch, classes]() {
+            if (tensor->requires_grad) {
+                for (std::size_t b{}; b < batch; ++b) {
+                    std::size_t row_start = b * classes;
+
+                    for (std::size_t j{}; j < classes; ++j) {
+                        float grad_j = 0.0f;
+                        for (std::size_t i{}; i < classes; ++i) {
+                            float p_i = out->data[row_start + i];
+                            float p_j = out->data[row_start + j];
+                            float delta = (i == j) ? 1.0f : 0.0f;
+                            float jacobian_ij = p_i * (delta - p_j);
+                            grad_j += out->grad[row_start + i] * jacobian_ij;
+                        }
+                        tensor->grad[row_start + j] += grad_j;
+                    }
+                }
+            }
+        };
+
+        return result;
+    }
+
     std::shared_ptr<Tensor> sum(const std::shared_ptr<Tensor>& tensor)
     {
         float s = 0.0f;
@@ -669,6 +730,139 @@ namespace zerograd
                         std::size_t dest_idx = (j * tensor->shape[0]) + i;
 
                         tensor->grad[src_idx] += out->grad[dest_idx];
+                    }
+                }
+            }
+        };
+
+        return result;
+    }
+
+    std::shared_ptr<Tensor> batchNorm1d(
+            const std::shared_ptr<Tensor>& input,
+            const std::shared_ptr<Tensor>& gamma,
+            const std::shared_ptr<Tensor>& beta,
+            std::shared_ptr<Tensor>& running_mean,
+            std::shared_ptr<Tensor>& running_var,
+            bool training = true,
+            float momentum = 0.1f,
+            float epsilon = 1e-5f
+        )
+    {
+        if (input->shape.size() != 2) {
+            throw std::runtime_error("Input must be a 2D tensor of shape (batch, classes)");
+        }
+
+        std::size_t batch = input->shape[0];
+        std::size_t classes = input->shape[1];
+
+        std::vector<float> mean(classes, 0.0f);
+        std::vector<float> var(classes, 0.0f);
+        std::vector<float> std_dev(classes, 0.0f);
+        std::vector<float> result_data(input->data.size());
+
+        // calculating the mean
+        for (std::size_t b{}; b < batch; ++b) {
+            std::size_t row_start = b * classes;
+
+            for (std::size_t i{}; i < classes; ++i) {
+                mean[i] += input->data[row_start + i];
+            }
+        }
+
+        for (std::size_t i{}; i < classes; ++i) {
+            mean[i] /= batch;
+        }
+
+        // calculating the variance and the standard deviation
+        for (std::size_t b{}; b < batch; ++b) {
+            std::size_t row_start = b * classes;
+
+            for (std::size_t i{}; i < classes; ++i) {
+                float diff = input->data[row_start + i] - mean[i];
+                var[i] += diff * diff;
+            }
+        }
+
+        for (std::size_t i{}; i < classes; ++i) {
+            var[i] /= batch;
+            std_dev[i] = std::sqrt(var[i] + epsilon);
+        }
+
+        std::vector<float> x_hat(input->data.size());
+
+        // normalizing, scaling&shifting and calculating moving averages
+        if (training) {
+            for (std::size_t b{}; b < batch; ++b) {
+                std::size_t row_start = b * classes;
+
+                for (std::size_t i{}; i < classes; ++i) {
+                    x_hat[row_start + i] = (input->data[row_start + i] - mean[i]) / std_dev[i];
+                    result_data[row_start + i] = (gamma->data[i] * x_hat[row_start + i]) + beta->data[i];
+                }
+            }
+                
+            float bessel_correction = (batch > 1) ? (static_cast<float>(batch) / (batch - 1)) : 1.0f;
+            for (std::size_t i{}; i < classes; ++i) {
+                running_mean->data[i] = (momentum * running_mean->data[i]) + (1.0f - momentum) * mean[i];
+                running_var->data[i] = (momentum * running_var->data[i]) + (1.0f - momentum) * (var[i] * bessel_correction);
+            }
+        }
+        else {
+            for (std::size_t b{}; b < batch; ++b) {
+                std::size_t row_start = b * classes;
+                
+                for (std::size_t i{}; i < classes; ++i) {
+                    float r_mean = running_mean->data[i];
+                    float r_var = running_var->data[i];
+                    
+                    x_hat[row_start + i] = (input->data[row_start + i] - r_mean) / std::sqrt(r_var + epsilon);
+                    result_data[row_start + i] = (gamma->data[i] * x_hat[row_start + i]) + beta->data[i];
+                }
+            }
+        }
+
+        bool req_grad = input->requires_grad || beta->requires_grad || gamma->requires_grad;
+
+        auto result = std::make_shared<Tensor>(
+            result_data,
+            input->shape,
+            req_grad,
+            std::vector<std::shared_ptr<Tensor>>{input, gamma, beta},
+            "batchNorm1d"
+        );
+
+        result->_backward = [input, out = result.get(), batch, classes, beta, gamma, x_hat, std_dev]() {
+            std::vector<float> d_beta(classes, 0.0f);
+            std::vector<float> d_gamma(classes, 0.0f);
+
+            for (std::size_t b{}; b < batch; ++b) {
+                std::size_t row_start = b * classes;
+
+                for (std::size_t i{}; i < classes; ++i) {
+                    d_beta[i] += out->grad[row_start + i]; 
+                    d_gamma[i] += out->grad[row_start + i] * x_hat[row_start + i];
+                }
+            }
+
+            if (beta->requires_grad) {
+                for (std::size_t i{}; i < classes; ++i) {
+                    beta->grad[i] += d_beta[i];
+                }
+            }
+
+            if (gamma->requires_grad) {
+                for (std::size_t i{}; i < classes; ++i) {
+                    gamma->grad[i] += d_gamma[i];
+                }
+            }
+
+            if (input->requires_grad) {
+                for (std::size_t b{}; b < batch; ++b) {
+                    std::size_t row_start = b * classes;
+
+                    for (std::size_t i{}; i < classes; ++i) {
+                        input->grad[row_start + i] += (gamma->data[i] / (batch * std_dev[i])) * (batch * out->grad[row_start + i] - d_beta[i] - x_hat[row_start + i] * d_gamma[i]);
                     }
                 }
             }

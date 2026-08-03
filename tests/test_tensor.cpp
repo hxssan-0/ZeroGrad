@@ -1240,3 +1240,187 @@ TEST_CASE("Tensor Exp Backward", "[tensor][backward][exp]") {
         }
     }
 }
+
+TEST_CASE("Tensor Softmax Forward", "[tensor][forward][softmax]") {
+
+    SECTION("Outputs sum to 1 - single row") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f},
+            std::vector<size_t>{1, 3}
+        );
+        auto result = zerograd::softmax(t);
+
+        float row_sum = 0.0f;
+        for (float v : result->data) row_sum += v;
+        REQUIRE(row_sum == Catch::Approx(1.0f).margin(1e-5f));
+    }
+
+    SECTION("Outputs sum to 1 - each row independently, batched") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f,
+                               -1.0f, 0.0f, 5.0f,
+                               10.0f, 10.0f, 10.0f},
+            std::vector<size_t>{3, 3}
+        );
+        auto result = zerograd::softmax(t);
+
+        for (size_t b = 0; b < 3; ++b) {
+            float row_sum = 0.0f;
+            for (size_t j = 0; j < 3; ++j)
+                row_sum += result->data[b * 3 + j];
+            REQUIRE(row_sum == Catch::Approx(1.0f).margin(1e-5f));
+        }
+    }
+
+    SECTION("All outputs are positive") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{-5.0f, 0.0f, 5.0f, -100.0f},
+            std::vector<size_t>{1, 4}
+        );
+        auto result = zerograd::softmax(t);
+        for (float v : result->data)
+            REQUIRE(v >= 0.0f);
+    }
+
+    SECTION("Equal inputs give uniform distribution") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{2.0f, 2.0f, 2.0f, 2.0f},
+            std::vector<size_t>{1, 4}
+        );
+        auto result = zerograd::softmax(t);
+        for (float v : result->data)
+            REQUIRE(v == Catch::Approx(0.25f));
+    }
+
+    SECTION("Largest input gets largest probability") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 5.0f, 2.0f},
+            std::vector<size_t>{1, 3}
+        );
+        auto result = zerograd::softmax(t);
+        REQUIRE(result->data[1] > result->data[0]);
+        REQUIRE(result->data[1] > result->data[2]);
+    }
+
+    SECTION("Numerical stability - large values don't overflow") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1000.0f, 999.0f, 998.0f},
+            std::vector<size_t>{1, 3}
+        );
+        auto result = zerograd::softmax(t);
+        for (float v : result->data)
+            REQUIRE(std::isfinite(v));
+
+        float row_sum = 0.0f;
+        for (float v : result->data) row_sum += v;
+        REQUIRE(row_sum == Catch::Approx(1.0f).margin(1e-4f));
+    }
+
+    SECTION("Numerical stability - very negative values don't underflow to nan") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{-1000.0f, -999.0f, -998.0f},
+            std::vector<size_t>{1, 3}
+        );
+        auto result = zerograd::softmax(t);
+        for (float v : result->data)
+            REQUIRE(std::isfinite(v));
+    }
+
+    SECTION("Shape preserved") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f},
+            std::vector<size_t>{2, 3}
+        );
+        auto result = zerograd::softmax(t);
+        REQUIRE(result->shape == std::vector<size_t>{2, 3});
+    }
+
+    SECTION("Non-2D input throws") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f},
+            std::vector<size_t>{3}
+        );
+        REQUIRE_THROWS_AS(zerograd::softmax(t), std::runtime_error);
+    }
+}
+
+TEST_CASE("Tensor Softmax Backward", "[tensor][backward][softmax]") {
+
+    SECTION("Gradient check - single row, multiple classes") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{0.5f, -1.2f, 2.3f, 0.1f},
+            std::vector<size_t>{1, 4}, true
+        );
+
+        auto forward = [&t]() { return sum(zerograd::softmax(t)); };
+
+        auto out = forward();
+        out->backward();
+
+        for (size_t i = 0; i < t->data.size(); ++i) {
+            float numerical = compute_tensor_numerical_gradient(forward, t, i);
+            REQUIRE(t->grad[i] == Catch::Approx(numerical).margin(1e-3f));
+        }
+    }
+
+    SECTION("Gradient check - batched, multiple rows") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{
+                1.0f, 2.0f, -1.0f,
+                0.5f, -0.5f, 3.0f
+            },
+            std::vector<size_t>{2, 3}, true
+        );
+
+        auto forward = [&t]() { return sum(zerograd::softmax(t)); };
+
+        auto out = forward();
+        out->backward();
+
+        for (size_t i = 0; i < t->data.size(); ++i) {
+            float numerical = compute_tensor_numerical_gradient(forward, t, i);
+            REQUIRE(t->grad[i] == Catch::Approx(numerical).margin(1e-3f));
+        }
+    }
+
+    SECTION("Gradient check - composed with a non-uniform downstream weighting") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.5f, -0.5f, 2.0f},
+            std::vector<size_t>{1, 3}, true
+        );
+        auto weights = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{2.0f, -1.0f, 0.5f},
+            std::vector<size_t>{1, 3}
+        );
+
+        auto forward = [&t, &weights]() { return sum(zerograd::softmax(t) * weights); };
+
+        auto out = forward();
+        out->backward();
+
+        for (size_t i = 0; i < t->data.size(); ++i) {
+            float numerical = compute_tensor_numerical_gradient(forward, t, i);
+            REQUIRE(t->grad[i] == Catch::Approx(numerical).margin(1e-3f));
+        }
+    }
+
+    SECTION("Gradient check - extreme values (stability under backward too)") {
+        auto t = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{50.0f, -50.0f, 0.0f},
+            std::vector<size_t>{1, 3}, true
+        );
+        auto weights = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 1.0f, 1.0f},
+            std::vector<size_t>{1, 3}
+        );
+
+        auto forward = [&t, &weights]() { return sum(zerograd::softmax(t) * weights); };
+
+        auto out = forward();
+        out->backward();
+
+        for (size_t i = 0; i < t->data.size(); ++i) {
+            REQUIRE(std::isfinite(t->grad[i]));
+        }
+    }
+}
