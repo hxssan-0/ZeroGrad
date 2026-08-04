@@ -1424,3 +1424,236 @@ TEST_CASE("Tensor Softmax Backward", "[tensor][backward][softmax]") {
         }
     }
 }
+
+TEST_CASE("BatchNorm1d Forward", "[tensor][forward][batchnorm]") {
+
+    SECTION("Training mode - output has ~zero mean, ~unit variance per feature") {
+        auto input = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{
+                1.0f, 10.0f,
+                2.0f, 20.0f,
+                3.0f, 30.0f,
+                4.0f, 40.0f
+            },
+            std::vector<size_t>{4, 2}
+        );
+        auto gamma = std::make_shared<zerograd::Tensor>(std::vector<float>{1.0f, 1.0f}, std::vector<size_t>{2});
+        auto beta = std::make_shared<zerograd::Tensor>(std::vector<float>{0.0f, 0.0f}, std::vector<size_t>{2});
+        auto running_mean = std::make_shared<zerograd::Tensor>(std::vector<float>{0.0f, 0.0f}, std::vector<size_t>{2});
+        auto running_var = std::make_shared<zerograd::Tensor>(std::vector<float>{1.0f, 1.0f}, std::vector<size_t>{2});
+
+        auto result = zerograd::batchNorm1d(input, gamma, beta, running_mean, running_var, true);
+
+        for (size_t feature = 0; feature < 2; ++feature) {
+            float mean = 0.0f;
+            for (size_t b = 0; b < 4; ++b) mean += result->data[b * 2 + feature];
+            mean /= 4.0f;
+            REQUIRE(mean == Catch::Approx(0.0f).margin(1e-4f));
+
+            float var = 0.0f;
+            for (size_t b = 0; b < 4; ++b) {
+                float diff = result->data[b * 2 + feature] - mean;
+                var += diff * diff;
+            }
+            var /= 4.0f;
+            REQUIRE(var == Catch::Approx(1.0f).margin(1e-3f));
+        }
+    }
+
+    SECTION("gamma=1, beta=0 preserves pure normalization") {
+        auto input = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},
+            std::vector<size_t>{4, 1}
+        );
+        auto gamma = std::make_shared<zerograd::Tensor>(std::vector<float>{1.0f}, std::vector<size_t>{1});
+        auto beta = std::make_shared<zerograd::Tensor>(std::vector<float>{0.0f}, std::vector<size_t>{1});
+        auto running_mean = std::make_shared<zerograd::Tensor>(std::vector<float>{0.0f}, std::vector<size_t>{1});
+        auto running_var = std::make_shared<zerograd::Tensor>(std::vector<float>{1.0f}, std::vector<size_t>{1});
+
+        auto result = zerograd::batchNorm1d(input, gamma, beta, running_mean, running_var, true);
+
+        REQUIRE(result->data[0] == Catch::Approx(-result->data[3]).margin(1e-4f));
+        REQUIRE(result->data[1] == Catch::Approx(-result->data[2]).margin(1e-4f));
+    }
+
+    SECTION("gamma and beta shift/scale correctly") {
+        auto input = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},
+            std::vector<size_t>{4, 1}
+        );
+        auto gamma = std::make_shared<zerograd::Tensor>(std::vector<float>{2.0f}, std::vector<size_t>{1});
+        auto beta = std::make_shared<zerograd::Tensor>(std::vector<float>{5.0f}, std::vector<size_t>{1});
+        auto running_mean = std::make_shared<zerograd::Tensor>(std::vector<float>{0.0f}, std::vector<size_t>{1});
+        auto running_var = std::make_shared<zerograd::Tensor>(std::vector<float>{1.0f}, std::vector<size_t>{1});
+
+        auto result = zerograd::batchNorm1d(input, gamma, beta, running_mean, running_var, true);
+
+        float mean = 0.0f;
+        for (float v : result->data) mean += v;
+        mean /= result->data.size();
+        REQUIRE(mean == Catch::Approx(5.0f).margin(1e-4f));
+    }
+
+    SECTION("Eval mode uses running stats, not batch stats") {
+        auto input = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{100.0f, 200.0f},  // wildly different from running stats
+            std::vector<size_t>{1, 2}
+        );
+        auto gamma = std::make_shared<zerograd::Tensor>(std::vector<float>{1.0f, 1.0f}, std::vector<size_t>{2});
+        auto beta = std::make_shared<zerograd::Tensor>(std::vector<float>{0.0f, 0.0f}, std::vector<size_t>{2});
+        auto running_mean = std::make_shared<zerograd::Tensor>(std::vector<float>{0.0f, 0.0f}, std::vector<size_t>{2});
+        auto running_var = std::make_shared<zerograd::Tensor>(std::vector<float>{1.0f, 1.0f}, std::vector<size_t>{2});
+
+        auto result = zerograd::batchNorm1d(input, gamma, beta, running_mean, running_var, false);
+
+        REQUIRE(result->data[0] == Catch::Approx(100.0f).margin(0.1f));
+        REQUIRE(result->data[1] == Catch::Approx(200.0f).margin(0.1f));
+    }
+
+    SECTION("Eval mode does not modify running stats") {
+        auto input = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f},
+            std::vector<size_t>{1, 2}
+        );
+        auto gamma = std::make_shared<zerograd::Tensor>(std::vector<float>{1.0f, 1.0f}, std::vector<size_t>{2});
+        auto beta = std::make_shared<zerograd::Tensor>(std::vector<float>{0.0f, 0.0f}, std::vector<size_t>{2});
+        auto running_mean = std::make_shared<zerograd::Tensor>(std::vector<float>{5.0f, 5.0f}, std::vector<size_t>{2});
+        auto running_var = std::make_shared<zerograd::Tensor>(std::vector<float>{2.0f, 2.0f}, std::vector<size_t>{2});
+
+        zerograd::batchNorm1d(input, gamma, beta, running_mean, running_var, false);
+
+        REQUIRE(running_mean->data[0] == Catch::Approx(5.0f));
+        REQUIRE(running_var->data[0] == Catch::Approx(2.0f));
+    }
+
+    SECTION("Training mode updates running stats using PyTorch momentum formula") {
+        auto input = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},
+            std::vector<size_t>{4, 1}
+        );
+        auto gamma = std::make_shared<zerograd::Tensor>(std::vector<float>{1.0f}, std::vector<size_t>{1});
+        auto beta = std::make_shared<zerograd::Tensor>(std::vector<float>{0.0f}, std::vector<size_t>{1});
+        auto running_mean = std::make_shared<zerograd::Tensor>(std::vector<float>{0.0f}, std::vector<size_t>{1});
+        auto running_var = std::make_shared<zerograd::Tensor>(std::vector<float>{1.0f}, std::vector<size_t>{1});
+
+        zerograd::batchNorm1d(input, gamma, beta, running_mean, running_var, true, 0.1f);
+        
+        REQUIRE(running_mean->data[0] == Catch::Approx(0.25f).margin(1e-5f));
+        REQUIRE(running_var->data[0] == Catch::Approx(1.066666f).margin(1e-5f));
+    }
+
+    SECTION("Wrong shape throws") {
+        auto input = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f},
+            std::vector<size_t>{3}
+        );
+        auto gamma = std::make_shared<zerograd::Tensor>(std::vector<float>{1.0f}, std::vector<size_t>{1});
+        auto beta = std::make_shared<zerograd::Tensor>(std::vector<float>{0.0f}, std::vector<size_t>{1});
+        auto running_mean = std::make_shared<zerograd::Tensor>(std::vector<float>{0.0f}, std::vector<size_t>{1});
+        auto running_var = std::make_shared<zerograd::Tensor>(std::vector<float>{1.0f}, std::vector<size_t>{1});
+
+        REQUIRE_THROWS_AS(
+            zerograd::batchNorm1d(input, gamma, beta, running_mean, running_var, true),
+            std::runtime_error
+        );
+    }
+}
+
+TEST_CASE("BatchNorm1d Backward - Gradient Checking", "[tensor][backward][batchnorm][gradcheck]") {
+
+    SECTION("Gradient check - input") {
+        auto input = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f},
+            std::vector<size_t>{3, 2}, true
+        );
+        auto gamma = std::make_shared<zerograd::Tensor>(std::vector<float>{1.5f, 0.8f}, std::vector<size_t>{2}, true);
+        auto beta = std::make_shared<zerograd::Tensor>(std::vector<float>{0.5f, -0.2f}, std::vector<size_t>{2}, true);
+        auto running_mean = std::make_shared<zerograd::Tensor>(std::vector<float>{0.0f, 0.0f}, std::vector<size_t>{2});
+        auto running_var = std::make_shared<zerograd::Tensor>(std::vector<float>{1.0f, 1.0f}, std::vector<size_t>{2});
+
+        auto forward = [&]() {
+            return sum(zerograd::batchNorm1d(input, gamma, beta, running_mean, running_var, true));
+        };
+
+        auto out = forward();
+        out->backward();
+
+        for (size_t i = 0; i < input->data.size(); ++i) {
+            float numerical = compute_tensor_numerical_gradient(forward, input, i);
+            REQUIRE(input->grad[i] == Catch::Approx(numerical).margin(1e-2f));
+        }
+    }
+
+    SECTION("Gradient check - gamma") {
+        auto input = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f},
+            std::vector<size_t>{3, 2}, true
+        );
+        auto gamma = std::make_shared<zerograd::Tensor>(std::vector<float>{1.5f, 0.8f}, std::vector<size_t>{2}, true);
+        auto beta = std::make_shared<zerograd::Tensor>(std::vector<float>{0.5f, -0.2f}, std::vector<size_t>{2}, true);
+        auto running_mean = std::make_shared<zerograd::Tensor>(std::vector<float>{0.0f, 0.0f}, std::vector<size_t>{2});
+        auto running_var = std::make_shared<zerograd::Tensor>(std::vector<float>{1.0f, 1.0f}, std::vector<size_t>{2});
+
+        auto forward = [&]() {
+            return sum(zerograd::batchNorm1d(input, gamma, beta, running_mean, running_var, true));
+        };
+
+        auto out = forward();
+        out->backward();
+
+        for (size_t i = 0; i < gamma->data.size(); ++i) {
+            float numerical = compute_tensor_numerical_gradient(forward, gamma, i);
+            REQUIRE(gamma->grad[i] == Catch::Approx(numerical).margin(1e-2f));
+        }
+    }
+
+    SECTION("Gradient check - beta") {
+        auto input = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f},
+            std::vector<size_t>{3, 2}, true
+        );
+        auto gamma = std::make_shared<zerograd::Tensor>(std::vector<float>{1.5f, 0.8f}, std::vector<size_t>{2}, true);
+        auto beta = std::make_shared<zerograd::Tensor>(std::vector<float>{0.5f, -0.2f}, std::vector<size_t>{2}, true);
+        auto running_mean = std::make_shared<zerograd::Tensor>(std::vector<float>{0.0f, 0.0f}, std::vector<size_t>{2});
+        auto running_var = std::make_shared<zerograd::Tensor>(std::vector<float>{1.0f, 1.0f}, std::vector<size_t>{2});
+
+        auto forward = [&]() {
+            return sum(zerograd::batchNorm1d(input, gamma, beta, running_mean, running_var, true));
+        };
+
+        auto out = forward();
+        out->backward();
+
+        for (size_t i = 0; i < beta->data.size(); ++i) {
+            float numerical = compute_tensor_numerical_gradient(forward, beta, i);
+            REQUIRE(beta->grad[i] == Catch::Approx(numerical).margin(1e-2f));
+        }
+    }
+
+    SECTION("Gradient check - with non-trivial downstream weighting") {
+        auto input = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{0.5f, -1.0f, 2.0f, 1.5f, -0.5f, 3.0f},
+            std::vector<size_t>{3, 2}, true
+        );
+        auto gamma = std::make_shared<zerograd::Tensor>(std::vector<float>{1.0f, 1.0f}, std::vector<size_t>{2}, true);
+        auto beta = std::make_shared<zerograd::Tensor>(std::vector<float>{0.0f, 0.0f}, std::vector<size_t>{2}, true);
+        auto running_mean = std::make_shared<zerograd::Tensor>(std::vector<float>{0.0f, 0.0f}, std::vector<size_t>{2});
+        auto running_var = std::make_shared<zerograd::Tensor>(std::vector<float>{1.0f, 1.0f}, std::vector<size_t>{2});
+        auto weights = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f, 2.0f, -1.0f, 0.5f, 3.0f, -2.0f},
+            std::vector<size_t>{3, 2}
+        );
+
+        auto forward = [&]() {
+            return sum(zerograd::batchNorm1d(input, gamma, beta, running_mean, running_var, true) * weights);
+        };
+
+        auto out = forward();
+        out->backward();
+
+        for (size_t i = 0; i < input->data.size(); ++i) {
+            float numerical = compute_tensor_numerical_gradient(forward, input, i);
+            REQUIRE(input->grad[i] == Catch::Approx(numerical).margin(1e-2f));
+        }
+    }
+}

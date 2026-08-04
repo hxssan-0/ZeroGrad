@@ -744,9 +744,9 @@ namespace zerograd
             const std::shared_ptr<Tensor>& beta,
             std::shared_ptr<Tensor>& running_mean,
             std::shared_ptr<Tensor>& running_var,
-            bool training = true,
-            float momentum = 0.1f,
-            float epsilon = 1e-5f
+            bool training,
+            float momentum,
+            float epsilon
         )
     {
         if (input->shape.size() != 2) {
@@ -804,8 +804,8 @@ namespace zerograd
                 
             float bessel_correction = (batch > 1) ? (static_cast<float>(batch) / (batch - 1)) : 1.0f;
             for (std::size_t i{}; i < classes; ++i) {
-                running_mean->data[i] = (momentum * running_mean->data[i]) + (1.0f - momentum) * mean[i];
-                running_var->data[i] = (momentum * running_var->data[i]) + (1.0f - momentum) * (var[i] * bessel_correction);
+                running_mean->data[i] = (momentum * mean[i]) + (1.0f - momentum) * running_mean->data[i];
+                running_var->data[i] = (momentum * var[i] * bessel_correction) + (1.0f - momentum) * running_var->data[i];
             }
         }
         else {
@@ -868,6 +868,234 @@ namespace zerograd
             }
         };
 
+        return result;
+    }
+
+    std::shared_ptr<Tensor> im2col(
+        const std::shared_ptr<Tensor>& img,
+        std::size_t kernel_h,
+        std::size_t kernel_w,
+        std::size_t stride,
+        std::size_t padding
+    )
+    {
+        if (img->shape.size() != 4) {
+            throw std::invalid_argument("im2col requires an image tensor of 4 dimensions.");
+        }
+
+        std::size_t N = img->shape[0];
+        std::size_t C_in = img->shape[1];
+        std::size_t h_in = img->shape[2];
+        std::size_t w_in = img->shape[3];
+
+        std::size_t h_out = ((h_in + 2 * padding - kernel_h) / stride) + 1;
+        std::size_t w_out = ((w_in + 2 * padding - kernel_w) / stride) + 1;
+
+        std::size_t rows_out = C_in * kernel_h * kernel_w;
+        std::size_t cols_out = N * h_out * w_out;
+
+        std::vector<float> col_data(rows_out * cols_out, 0.0f);
+
+        std::size_t col_idx = 0;
+        for (std::size_t n{}; n < N; ++n) {
+            for (std::size_t out_h{}; out_h < h_out; ++out_h) {
+                for (std::size_t out_w{}; out_w < w_out; ++out_w) {
+                    std::size_t row_idx = 0;
+                    for (std::size_t c{}; c < C_in; ++c) {
+                        for (std::size_t kh{}; kh < kernel_h; ++kh) {
+                            for (std::size_t kw{}; kw < kernel_w; ++kw) {
+                                int in_h = static_cast<int>(out_h * stride + kh) - static_cast<int>(padding);
+                                int in_w = static_cast<int>(out_w * stride + kw) - static_cast<int>(padding);
+
+                                float val = 0.0f;
+                                if (in_h >= 0 && in_h < static_cast<int>(h_in) &&
+                                    in_w >= 0 && in_w < static_cast<int>(w_in)) {
+                                        std::size_t img_idx = n * (C_in * h_in * w_in) + c * (h_in * w_in) + static_cast<std::size_t>(in_h) * w_in + static_cast<std::size_t>(in_w);
+                                        val = img->data[img_idx];
+                                }
+
+                                col_data[row_idx * cols_out + col_idx] = val;
+                                ++row_idx;
+                            }
+                        }
+                    }
+                    ++col_idx;
+                }
+            }
+        }
+
+        return std::make_shared<Tensor>(
+            col_data,
+            std::vector<std::size_t>{rows_out, cols_out},
+            img->requires_grad
+        );
+    }
+
+    std::shared_ptr<Tensor> col2im(
+        const std::shared_ptr<Tensor>& dX_col,
+        const std::vector<std::size_t>& img_shape,
+        std::size_t kernel_h,
+        std::size_t kernel_w,
+        std::size_t stride,
+        std::size_t padding
+    )
+    {
+        std::size_t N = img_shape[0];
+        std::size_t C_in = img_shape[1];
+        std::size_t h_in = img_shape[2];
+        std::size_t w_in = img_shape[3];
+
+        std::size_t h_out = ((h_in + 2 * padding - kernel_h) / stride) + 1;
+        std::size_t w_out = ((w_in + 2 * padding - kernel_w) / stride) + 1;
+
+        std::size_t channels_col = C_in * kernel_h * kernel_w;
+        std::size_t num_cols = N * h_out * w_out;
+
+        std::vector<float> dX_data(N * C_in * h_in * w_in, 0.0f);
+
+        std::size_t col_idx = 0;
+        for (std::size_t n = 0; n < N; ++n) {
+            for (std::size_t out_h = 0; out_h < h_out; ++out_h) {
+                for (std::size_t out_w = 0; out_w < w_out; ++out_w) {
+                    std::size_t row_idx = 0;
+                    for (std::size_t c = 0; c < C_in; ++c) {
+                        for (std::size_t kh = 0; kh < kernel_h; ++kh) {
+                            for (std::size_t kw = 0; kw < kernel_w; ++kw) {
+                                
+                                int in_h = static_cast<int>(out_h * stride + kh) - static_cast<int>(padding);
+                                int in_w = static_cast<int>(out_w * stride + kw) - static_cast<int>(padding);
+
+                                if (in_h >= 0 && in_h < static_cast<int>(h_in) &&
+                                    in_w >= 0 && in_w < static_cast<int>(w_in)) {
+                                    
+                                    std::size_t img_idx = n * (C_in * h_in * w_in) + 
+                                                        c * (h_in * w_in) + 
+                                                        static_cast<std::size_t>(in_h) * w_in + 
+                                                        static_cast<std::size_t>(in_w);
+
+                                    float grad_val = dX_col->data[row_idx * num_cols + col_idx];
+                                    
+                                    dX_data[img_idx] += grad_val;
+                                }
+                                row_idx++;
+                            }
+                        }
+                    }
+                    col_idx++;
+                }
+            }
+        }
+
+        return std::make_shared<Tensor>(dX_data, img_shape);
+    }
+
+    std::shared_ptr<Tensor> conv2d(
+        const std::shared_ptr<Tensor>& input,
+        const std::shared_ptr<Tensor>& weight,
+        const std::shared_ptr<Tensor>& bias,
+        std::size_t stride,
+        std::size_t padding
+    )
+    {
+        if (input->shape.size() != 4) {
+            throw std::invalid_argument("conv2d requires an input tensor of 4 dimensions.");
+        }
+
+        if (weight->shape.size() != 4) {
+            throw std::invalid_argument("conv2d requires a kernel tensor of 4 dimensions.");
+        }
+
+        if (input->shape[1] != weight->shape[1]) {
+            throw std::invalid_argument("Input channels must match weight input channels.");
+        }
+
+        std::size_t N = input->shape[0];
+        std::size_t C_out = weight->shape[0];
+        std::size_t C_in = weight->shape[1];
+        std::size_t kernel_h = weight->shape[2];
+        std::size_t kernel_w = weight->shape[3];
+
+        std::size_t h_out = ((input->shape[2] + 2 * padding - kernel_h) / stride) + 1;
+        std::size_t w_out = ((input->shape[3] + 2 * padding - kernel_w) / stride) + 1;
+
+        auto X_col = im2col(input, kernel_h, kernel_w, stride, padding);
+        
+        std::size_t K_flat = C_in * kernel_h * kernel_w;
+        auto W_col = std::make_shared<Tensor>(
+            weight->data,
+            std::vector<std::size_t>{C_out, K_flat},
+            weight->requires_grad
+        );
+
+        auto out_col = matmul(W_col, X_col);
+
+        std::vector<float> result_data(N * C_out * h_out * w_out);
+
+        for (std::size_t n{}; n < N; ++n) {
+            for (std::size_t c{}; c < C_out; ++c) {
+                float b_val = (bias != nullptr) ? bias->data[c] : 0.0f;
+                for (std::size_t h{}; h < h_out; ++h) {
+                    for (std::size_t w{}; w < w_out; ++w) {
+                        std::size_t col_idx = n * (h_out * w_out) + h * w_out + w;
+                        std::size_t out_col_idx = c * (N * h_out * w_out) + col_idx;
+                        std::size_t final_idx = n * (C_out * h_out * w_out) + c * (h_out * w_out) + h * w_out + w;
+                        result_data[final_idx] = out_col->data[out_col_idx] + b_val;
+                    }
+                }
+            }
+        }
+
+        bool req_grad = input->requires_grad || weight->requires_grad || (bias && bias->requires_grad);
+        std::vector<std::shared_ptr<Tensor>> parents{input, weight};
+        if (bias) parents.push_back(bias);
+
+        auto result = std::make_shared<Tensor>(
+            result_data,
+            std::vector<std::size_t>{N, C_out, h_out, w_out},
+            req_grad,
+            parents,
+            "conv2d"
+        );
+
+        result->_backward = [input, weight, bias, out = result.get(), X_col, W_col, stride, padding, N, C_out, C_in, kernel_h, kernel_w, h_out, w_out]() {
+            std::size_t num_cols = N * h_out * w_out;
+            std::size_t K_flat = C_in * kernel_h * kernel_w;
+
+            auto dOut_col = std::make_shared<Tensor>(
+                out->grad,
+                std::vector<std::size_t>{C_out, num_cols}
+            );
+
+            if (bias && bias->requires_grad) {
+                for (std::size_t c = 0; c < C_out; ++c) {
+                    float sum = 0.0f;
+                    for (std::size_t col = 0; col < num_cols; ++col) {
+                        sum += dOut_col->data[c * num_cols + col];
+                    }
+                    bias->grad[c] += sum;
+                }
+            }
+
+            if (weight->requires_grad) {
+                auto X_col_T = transpose(X_col);
+                auto dW_col = matmul(dOut_col, X_col_T);
+
+                for (std::size_t i = 0; i < weight->data.size(); ++i) {
+                    weight->grad[i] += dW_col->data[i];
+                }
+            }
+
+            if (input->requires_grad) {
+                auto W_col_T = transpose(W_col); 
+                auto dX_col = matmul(W_col_T, dOut_col);
+
+                auto dX = col2im(dX_col, input->shape, kernel_h, kernel_w, stride, padding);
+
+                for (std::size_t i = 0; i < input->data.size(); ++i) {
+                    input->grad[i] += dX->data[i];
+                }
+            }
+        };
         return result;
     }
 

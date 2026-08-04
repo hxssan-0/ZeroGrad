@@ -72,9 +72,34 @@ namespace zerograd
             const std::shared_ptr<Tensor>& beta,
             std::shared_ptr<Tensor>& running_mean,
             std::shared_ptr<Tensor>& running_var,
-            bool training = true,
-            float momentum = 0.1f,
-            float epsilon = 1e-5f
+            bool training,
+            float momentum,
+            float epsilon
+        );
+
+        friend std::shared_ptr<Tensor> im2col(
+            const std::shared_ptr<Tensor>& img,
+            std::size_t kernel_h,
+            std::size_t kernel_w,
+            std::size_t stride,
+            std::size_t padding
+        );
+
+        friend std::shared_ptr<Tensor> col2im(
+            const std::shared_ptr<Tensor>& dX_col,
+            const std::vector<std::size_t>& img_shape, // (N, C_in, H, W)
+            std::size_t kernel_h,
+            std::size_t kernel_w,
+            std::size_t stride,
+            std::size_t padding
+        );
+
+        friend std::shared_ptr<Tensor> conv2d(
+            const std::shared_ptr<Tensor>& input,
+            const std::shared_ptr<Tensor>& weight,
+            const std::shared_ptr<Tensor>& bias,
+            std::size_t stride,
+            std::size_t padding
         );
 
         friend std::shared_ptr<Tensor> max(const std::shared_ptr<Tensor>& tensor);
@@ -102,6 +127,24 @@ namespace zerograd
     std::shared_ptr<Tensor> sum(const std::shared_ptr<Tensor>& tensor);
     std::shared_ptr<Tensor> mean(const std::shared_ptr<Tensor>& tensor);
     std::shared_ptr<Tensor> transpose(const std::shared_ptr<Tensor>& tensor);
+
+    std::shared_ptr<Tensor> im2col(
+        const std::shared_ptr<Tensor>& img,
+        std::size_t kernel_h,
+        std::size_t kernel_w,
+        std::size_t stride = 1,
+        std::size_t padding = 0
+    );
+
+    std::shared_ptr<Tensor> col2im(
+        const std::shared_ptr<Tensor>& dX_col,
+        const std::vector<std::size_t>& img_shape,
+        std::size_t kernel_h,
+        std::size_t kernel_w,
+        std::size_t stride = 1,
+        std::size_t padding = 0
+    )
+
     std::shared_ptr<Tensor> batchNorm1d(
         const std::shared_ptr<Tensor>& input,
         const std::shared_ptr<Tensor>& gamma,
@@ -112,6 +155,15 @@ namespace zerograd
         float momentum = 0.1f,
         float epsilon = 1e-5f
     );
+
+    std::shared_ptr<Tensor> conv2d(
+        const std::shared_ptr<Tensor>& input,
+        const std::shared_ptr<Tensor>& weight,
+        const std::shared_ptr<Tensor>& bias = nullptr,
+        std::size_t stride = 1,
+        std::size_t padding = 0
+    );
+
     std::shared_ptr<Tensor> max(const std::shared_ptr<Tensor>& tensor);
     std::shared_ptr<Tensor> mse_loss(const std::shared_ptr<Tensor>& prediction, const std::shared_ptr<Tensor>& target);
     std::shared_ptr<Tensor> ce_loss(const std::shared_ptr<Tensor>& logits, const std::vector<std::size_t>& target_classes);
@@ -120,4 +172,3 @@ namespace zerograd
     std::shared_ptr<Tensor> operator-(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right);
     std::shared_ptr<Tensor> operator*(const std::shared_ptr<Tensor>& left, const std::shared_ptr<Tensor>& right);
 }
-
