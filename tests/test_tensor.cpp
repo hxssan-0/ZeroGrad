@@ -1657,3 +1657,256 @@ TEST_CASE("BatchNorm1d Backward - Gradient Checking", "[tensor][backward][batchn
         }
     }
 }
+
+TEST_CASE("im2col Forward", "[tensor][forward][im2col]") {
+
+    SECTION("Correct output shape") {
+        auto img = std::make_shared<zerograd::Tensor>(
+            std::vector<float>(1 * 1 * 4 * 4, 1.0f),
+            std::vector<size_t>{1, 1, 4, 4}
+        );
+        auto col = zerograd::im2col(img, 2, 2, 1, 0);
+        
+        REQUIRE(col->shape == std::vector<size_t>{4, 9});
+    }
+
+    SECTION("Known simple 3x3 patch extraction") {
+        auto img = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1, 2, 3, 4, 5, 6, 7, 8, 9},
+            std::vector<size_t>{1, 1, 3, 3}
+        );
+        auto col = zerograd::im2col(img, 2, 2, 1, 0);
+        
+        REQUIRE(col->data[0 * col->shape[1] + 0] == Catch::Approx(1.0f));
+        REQUIRE(col->data[1 * col->shape[1] + 0] == Catch::Approx(2.0f));
+        REQUIRE(col->data[2 * col->shape[1] + 0] == Catch::Approx(4.0f));
+        REQUIRE(col->data[3 * col->shape[1] + 0] == Catch::Approx(5.0f));
+    }
+
+    SECTION("Padding produces zero borders") {
+        auto img = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1, 1, 1, 1},
+            std::vector<size_t>{1, 1, 2, 2}
+        );
+        auto col = zerograd::im2col(img, 2, 2, 1, 1);
+        
+        REQUIRE(col->data[0] == Catch::Approx(0.0f));
+    }
+}
+
+TEST_CASE("conv2d Forward", "[tensor][forward][conv2d]") {
+
+    SECTION("Correct output shape - no padding, stride 1") {
+        auto input = std::make_shared<zerograd::Tensor>(
+            std::vector<float>(1 * 1 * 5 * 5, 1.0f),
+            std::vector<size_t>{1, 1, 5, 5}
+        );
+        auto weight = std::make_shared<zerograd::Tensor>(
+            std::vector<float>(1 * 1 * 3 * 3, 1.0f),
+            std::vector<size_t>{1, 1, 3, 3}
+        );
+        auto result = zerograd::conv2d(input, weight, nullptr, 1, 0);
+        REQUIRE(result->shape == std::vector<size_t>{1, 1, 3, 3});
+    }
+
+    SECTION("Known values - single channel, identity-like sum kernel") {
+        auto input = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1, 2, 3, 4, 5, 6, 7, 8, 9},
+            std::vector<size_t>{1, 1, 3, 3}
+        );
+        auto weight = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1, 0, 0, 0},
+            std::vector<size_t>{1, 1, 2, 2}
+        );
+        auto result = zerograd::conv2d(input, weight, nullptr, 1, 0);
+        
+        REQUIRE(result->data[0] == Catch::Approx(1.0f));
+        REQUIRE(result->data[1] == Catch::Approx(2.0f));
+        REQUIRE(result->data[2] == Catch::Approx(4.0f));
+        REQUIRE(result->data[3] == Catch::Approx(5.0f));
+    }
+
+    SECTION("Bias is added correctly") {
+        auto input = std::make_shared<zerograd::Tensor>(
+            std::vector<float>(1 * 1 * 3 * 3, 0.0f),
+            std::vector<size_t>{1, 1, 3, 3}
+        );
+        auto weight = std::make_shared<zerograd::Tensor>(
+            std::vector<float>(1 * 1 * 2 * 2, 1.0f),
+            std::vector<size_t>{1, 1, 2, 2}
+        );
+        auto bias = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{5.0f},
+            std::vector<size_t>{1}
+        );
+        auto result = zerograd::conv2d(input, weight, bias, 1, 0);
+        for (float v : result->data)
+            REQUIRE(v == Catch::Approx(5.0f));
+    }
+
+    SECTION("Multiple output channels") {
+        auto input = std::make_shared<zerograd::Tensor>(
+            std::vector<float>(1 * 1 * 4 * 4, 1.0f),
+            std::vector<size_t>{1, 1, 4, 4}
+        );
+        auto weight = std::make_shared<zerograd::Tensor>(
+            std::vector<float>(2 * 1 * 2 * 2, 1.0f),
+            std::vector<size_t>{2, 1, 2, 2}
+        );
+        auto result = zerograd::conv2d(input, weight, nullptr, 1, 0);
+        REQUIRE(result->shape == std::vector<size_t>{1, 2, 3, 3});
+    }
+
+    SECTION("Stride > 1 reduces output size correctly") {
+        auto input = std::make_shared<zerograd::Tensor>(
+            std::vector<float>(1 * 1 * 5 * 5, 1.0f),
+            std::vector<size_t>{1, 1, 5, 5}
+        );
+        auto weight = std::make_shared<zerograd::Tensor>(
+            std::vector<float>(1 * 1 * 3 * 3, 1.0f),
+            std::vector<size_t>{1, 1, 3, 3}
+        );
+        auto result = zerograd::conv2d(input, weight, nullptr, 2, 0);
+        
+        REQUIRE(result->shape == std::vector<size_t>{1, 1, 2, 2});
+    }
+}
+
+TEST_CASE("conv2d Backward - Gradient Checking", "[tensor][backward][conv2d][gradcheck]") {
+
+    SECTION("Gradient check - input, batch size 1") {
+        auto input = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1,2,3,4,5,6,7,8,9},
+            std::vector<size_t>{1, 1, 3, 3}, true
+        );
+        auto weight = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{0.1f, 0.2f, 0.3f, 0.4f},
+            std::vector<size_t>{1, 1, 2, 2}, true
+        );
+
+        auto forward = [&]() { return sum(zerograd::conv2d(input, weight, nullptr, 1, 0)); };
+
+        auto out = forward();
+        out->backward();
+
+        for (size_t i = 0; i < input->data.size(); ++i) {
+            float numerical = compute_tensor_numerical_gradient(forward, input, i);
+            REQUIRE(input->grad[i] == Catch::Approx(numerical).margin(1e-2f));
+        }
+    }
+
+    SECTION("Gradient check - weight, batch size 1") {
+        auto input = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1,2,3,4,5,6,7,8,9},
+            std::vector<size_t>{1, 1, 3, 3}, true
+        );
+        auto weight = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{0.1f, 0.2f, 0.3f, 0.4f},
+            std::vector<size_t>{1, 1, 2, 2}, true
+        );
+
+        auto forward = [&]() { return sum(zerograd::conv2d(input, weight, nullptr, 1, 0)); };
+
+        auto out = forward();
+        out->backward();
+
+        for (size_t i = 0; i < weight->data.size(); ++i) {
+            float numerical = compute_tensor_numerical_gradient(forward, weight, i);
+            REQUIRE(weight->grad[i] == Catch::Approx(numerical).margin(1e-2f));
+        }
+    }
+
+    SECTION("CRITICAL: Gradient check - input, batch size > 1 (catches layout bugs)") {
+        auto input = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{
+                1,2,3,4,5,6,7,8,9,      
+                9,8,7,6,5,4,3,2,1        
+            },
+            std::vector<size_t>{2, 1, 3, 3}, true
+        );
+        auto weight = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{0.5f, -0.3f, 0.2f, 0.1f},
+            std::vector<size_t>{1, 1, 2, 2}, true
+        );
+
+        auto forward = [&]() { return sum(zerograd::conv2d(input, weight, nullptr, 1, 0)); };
+
+        auto out = forward();
+        out->backward();
+
+        for (size_t i = 0; i < input->data.size(); ++i) {
+            float numerical = compute_tensor_numerical_gradient(forward, input, i);
+            REQUIRE(input->grad[i] == Catch::Approx(numerical).margin(1e-2f));
+        }
+    }
+
+    SECTION("CRITICAL: Gradient check - weight, batch size > 1, multiple output channels") {
+        auto input = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{
+                1,2,3,4,5,6,7,8,9,
+                0.5f,1.5f,2.5f,3.5f,4.5f,5.5f,6.5f,7.5f,8.5f
+            },
+            std::vector<size_t>{2, 1, 3, 3}, true
+        );
+        auto weight = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{0.1f,0.2f,0.3f,0.4f, -0.1f,-0.2f,-0.3f,-0.4f},
+            std::vector<size_t>{2, 1, 2, 2}, true
+        );
+
+        auto forward = [&]() { return sum(zerograd::conv2d(input, weight, nullptr, 1, 0)); };
+
+        auto out = forward();
+        out->backward();
+
+        for (size_t i = 0; i < weight->data.size(); ++i) {
+            float numerical = compute_tensor_numerical_gradient(forward, weight, i);
+            REQUIRE(weight->grad[i] == Catch::Approx(numerical).margin(1e-2f));
+        }
+    }
+
+    SECTION("Gradient check - bias") {
+        auto input = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1,2,3,4,5,6,7,8,9},
+            std::vector<size_t>{1, 1, 3, 3}, true
+        );
+        auto weight = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{0.1f, 0.2f, 0.3f, 0.4f},
+            std::vector<size_t>{1, 1, 2, 2}, true
+        );
+        auto bias = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1.0f},
+            std::vector<size_t>{1}, true
+        );
+
+        auto forward = [&]() { return sum(zerograd::conv2d(input, weight, bias, 1, 0)); };
+
+        auto out = forward();
+        out->backward();
+
+        for (size_t i = 0; i < bias->data.size(); ++i) {
+            float numerical = compute_tensor_numerical_gradient(forward, bias, i);
+            REQUIRE(bias->grad[i] == Catch::Approx(numerical).margin(1e-2f));
+        }
+    }
+
+    SECTION("Gradient check - with padding and stride") {
+        auto input = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16},
+            std::vector<size_t>{1, 1, 4, 4}, true
+        );
+        auto weight = std::make_shared<zerograd::Tensor>(
+            std::vector<float>{0.2f,-0.1f,0.3f,0.05f,0.4f,-0.2f,0.1f,0.15f,-0.3f},
+            std::vector<size_t>{1, 1, 3, 3}, true
+        );
+
+        auto forward = [&]() { return sum(zerograd::conv2d(input, weight, nullptr, 2, 1)); };
+
+        auto out = forward();
+        out->backward();
+
+        for (size_t i = 0; i < input->data.size(); ++i) {
+            float numerical = compute_tensor_numerical_gradient(forward, input, i);
+            REQUIRE(input->grad[i] == Catch::Approx(numerical).margin(1e-2f));
+        }
+    }
+}

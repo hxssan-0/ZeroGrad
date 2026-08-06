@@ -2,6 +2,9 @@
 #include <stdexcept>
 #include <algorithm>
 #include <iterator>
+#include <stdexcept>
+#include <limits>
+#include <functional>
 #include <cmath>
 
 namespace zerograd
@@ -1061,10 +1064,21 @@ namespace zerograd
             std::size_t num_cols = N * h_out * w_out;
             std::size_t K_flat = C_in * kernel_h * kernel_w;
 
-            auto dOut_col = std::make_shared<Tensor>(
-                out->grad,
-                std::vector<std::size_t>{C_out, num_cols}
-            );
+            std::vector<float> dOut_col_data(C_out * num_cols);
+            for (std::size_t n{}; n < N; ++n) {
+                for (std::size_t c{}; c < C_out; ++c) {
+                    for (std::size_t h{}; h < h_out; ++h) {
+                        for (std::size_t w{}; w < w_out; ++w) {
+                            std::size_t final_idx = n * (C_out * h_out * w_out) + c * (h_out * w_out) + h * w_out + w;
+                            std::size_t col_idx = n * (h_out * w_out) + h * w_out + w;
+                            std::size_t out_col_idx = c * num_cols + col_idx;
+                            dOut_col_data[out_col_idx] = out->grad[final_idx];
+                        }
+                    }
+                }
+            }
+
+            auto dOut_col = std::make_shared<Tensor>(dOut_col_data, std::vector<std::size_t>{C_out, num_cols});
 
             if (bias && bias->requires_grad) {
                 for (std::size_t c = 0; c < C_out; ++c) {
@@ -1086,7 +1100,7 @@ namespace zerograd
             }
 
             if (input->requires_grad) {
-                auto W_col_T = transpose(W_col); 
+                auto W_col_T = transpose(W_col);
                 auto dX_col = matmul(W_col_T, dOut_col);
 
                 auto dX = col2im(dX_col, input->shape, kernel_h, kernel_w, stride, padding);
@@ -1096,6 +1110,121 @@ namespace zerograd
                 }
             }
         };
+
+        return result;
+    }
+
+    std::shared_ptr<Tensor> maxPool2d(
+        const std::shared_ptr<Tensor>& input,
+        std::size_t kernel_h,
+        std::size_t kernel_w,
+        std::size_t stride,
+        std::size_t padding
+    )
+    {
+        if (input->shape.size() != 4) {
+            throw std::invalid_argument("maxPool2d requires an input tensor of 4 dimensions.");
+        }
+
+        std::size_t N = input->shape[0];
+        std::size_t C = input->shape[1];
+        std::size_t H_in = input->shape[2];
+        std::size_t W_in = input->shape[3];
+
+        std::size_t H_out = ((H_in + 2 * padding - kernel_h) / stride) + 1;
+        std::size_t W_out = ((W_in + 2 * padding - kernel_w) / stride) + 1;
+
+        std::vector<float> result_data(N * C * H_out * W_out, 0.0f);
+
+        auto argmax_cache = std::make_shared<std::vector<std::size_t>>(N * C * H_out * W_out, 0);
+
+        for (std::size_t n{}; n < N; ++n) {
+            for (std::size_t c{}; n < C; ++c) {
+                for (std::size_t oh{}; h < H_out; ++oh) {
+                    for (std::size_t ow{}; w < W_out; ++ow) {
+                        float max_val = -std::numeric_limits<float>::infinity();
+                        std::size_t max_idx = 0;
+                        bool found = false;
+
+                        for (std::size_t kh{}; kh < kernel_h; ++kh) {
+                            for (std::size_t kw{}; kw < kernel_w; ++kw) {
+                                int ih = static_cast<int>(oh * stride + kh) - static_cast<int>(padding);
+                                int iw = static_cast<int>(ow * stride + kw) - static_cast<int>(padding);
+
+                                if (ih >= 0 && ih < static_cast<int>(H_in) &&
+                                    iw >= 0 && iw < static_cast<int>(W_in)) {
+
+                                    std::size_t in_idx = n * (C * H_in * W_in) + c * (H_in * W_in) + static_cast<std::size_t>(ih) * W_in + static_cast<std::size_t>(iw);
+
+                                    float val = input->data[in_idx];
+                                    if (!found || val > max_val) {
+                                        max_val = val;
+                                        max_idx = in_idx;
+                                        found = true;
+                                    }
+                                }
+                            }
+                        }
+
+                        std::size_t out_idx = n * (C * H_out * W_out) + c * (H_out * W_out) + oh * W_out + ow;
+                        out_data[out_idx] = max_val;
+                        (*argmax_cache)[out_idx] = max_idx;   
+                    }
+                }
+            }
+        }
+
+        auto result = std::make_shared<Tensor>(
+            result_data,
+            std::vector<std::size_t>({N, C, H_out, W_out}),
+            input->requires_grad,
+            std::vector<std::shared_ptr<Tensor>>{input},
+            "maxpool2d"
+        );
+
+        result->_backward = [input, out = result.get(), armgax]() {
+            if (input->requires_grad) {
+                for (std::size_t i{}; i < out->grad.size(); ++i) {
+                    std::size_t winning_idx = (*argmax)[i];
+                    input->grad[winning_idx] += out->grad[i];
+                }
+            }
+        };
+
+        return result;
+    }
+
+    std::shared_ptr<Tensor> flatten(std::shared_ptr<Tensor>& input)
+    {
+        if (input->shape.size() < 3) {
+            throw std::invalid_argument("cannot flatten a tensor with dimensions < 3.");
+        }
+
+        std::vector<std::size_t> result_shape{input->shape[0], 1};
+        for (std::size_t i{1}; i < input->shape.size(); ++i) {
+            result_shape[1] *= input->shape[i];
+        }
+
+        auto result = std::make_shared<Tensor>(
+            input->data,
+            result_shape,
+            input->requires_grad,
+            std::vector<std::shared_ptr<Tensor>>{input},
+            "flatten"
+        );
+
+        result->_backward = [input, out = result.get()]() {
+            if (input->requires_grad) {
+                std::transform(
+                    input->grad.begin(),
+                    input->grad.end(),
+                    out->grad.begin(),
+                    input->grad.begin(),
+                    std::plus<float>()
+                );
+            }
+        };
+
         return result;
     }
 

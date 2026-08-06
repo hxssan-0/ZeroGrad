@@ -87,7 +87,7 @@ namespace zerograd
 
         friend std::shared_ptr<Tensor> col2im(
             const std::shared_ptr<Tensor>& dX_col,
-            const std::vector<std::size_t>& img_shape, // (N, C_in, H, W)
+            const std::vector<std::size_t>& img_shape,
             std::size_t kernel_h,
             std::size_t kernel_w,
             std::size_t stride,
@@ -101,6 +101,16 @@ namespace zerograd
             std::size_t stride,
             std::size_t padding
         );
+
+        friend std::shared_ptr<Tensor> maxPool2d(
+            const std::shared_ptr<Tensor>& input,
+            std::size_t kernel_h,
+            std::size_t kernel_w,
+            std::size_t stride,
+            std::size_t padding
+        );
+
+        friend std::shared_ptr<Tensor> flatten(std::shared_ptr<Tensor>& input);
 
         friend std::shared_ptr<Tensor> max(const std::shared_ptr<Tensor>& tensor);
 
@@ -143,7 +153,7 @@ namespace zerograd
         std::size_t kernel_w,
         std::size_t stride = 1,
         std::size_t padding = 0
-    )
+    );
 
     std::shared_ptr<Tensor> batchNorm1d(
         const std::shared_ptr<Tensor>& input,
@@ -163,6 +173,16 @@ namespace zerograd
         std::size_t stride = 1,
         std::size_t padding = 0
     );
+
+    std::shared_ptr<Tensor> maxPool2d(
+        const std::shared_ptr<Tensor>& input,
+        std::size_t kernel_h,
+        std::size_t kernel_w,
+        std::size_t stride = 1,
+        std::size_t padding = 0
+    );
+
+    std::shared_ptr<Tensor> flatten(std::shared_ptr<Tensor>& input);
 
     std::shared_ptr<Tensor> max(const std::shared_ptr<Tensor>& tensor);
     std::shared_ptr<Tensor> mse_loss(const std::shared_ptr<Tensor>& prediction, const std::shared_ptr<Tensor>& target);
