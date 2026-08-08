@@ -24,12 +24,18 @@ cmake --build .
 ## Test
 
 ```bash
-ctest
+./zerograd_tests
 ```
 
-## Train
+## Train (MLP)
 
 ```bash
 ./train_mnist
 PYTHONPATH=build/python python3 python/zerograd/train_mnist.py
+```
+
+## Train (CNNC)
+
+```bash
+./train_mnist_cnn
 ```
