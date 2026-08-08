@@ -1910,3 +1910,66 @@ TEST_CASE("conv2d Backward - Gradient Checking", "[tensor][backward][conv2d][gra
         }
     }
 }
+
+TEST_CASE("maxPool2d basic values") {
+    std::vector<float> data = {
+        1,2,3,4,
+        5,6,7,8,
+        9,10,11,12,
+        13,14,15,16
+    };
+    auto t = std::make_shared<zerograd::Tensor>(data, std::vector<std::size_t>{1,1,4,4}, true);
+    auto out = zerograd::maxPool2d(t, 2, 2, 2, 0);
+    REQUIRE(out->shape == std::vector<std::size_t>{1,1,2,2});
+    REQUIRE(out->data == std::vector<float>{6,8,14,16});
+}
+
+TEST_CASE("maxPool2d gradient check") {
+    std::vector<float> data = {
+        1.0f, 3.2f, 2.1f, 4.4f,
+        0.5f, 6.6f, 1.9f, 2.2f,
+        3.3f, 1.1f, 5.5f, 0.8f,
+        2.7f, 4.1f, 0.3f, 3.9f
+    };
+    auto t = std::make_shared<zerograd::Tensor>(
+        data, std::vector<std::size_t>{1, 1, 4, 4}, true);
+
+    auto compute_graph = [&]() {
+        auto pooled = zerograd::maxPool2d(t, 2, 2, 2, 0);
+        return zerograd::sum(pooled);
+    };
+
+    std::fill(t->grad.begin(), t->grad.end(), 0.0f);
+    auto loss = compute_graph();
+    loss->backward();
+
+    for (std::size_t i = 0; i < t->data.size(); ++i) {
+        float numeric = compute_tensor_numerical_gradient(compute_graph, t, i);
+        REQUIRE(numeric == Catch::Approx(t->grad[i]).epsilon(0.01f));
+    }
+}
+
+TEST_CASE("flatten gradient check") {
+    std::vector<float> data = {
+        0.2f, -1.3f, 0.7f,
+        2.1f, -0.4f, 1.6f,
+        0.9f, -2.2f, 1.1f,
+        0.3f, 1.8f, -0.6f
+    };
+    auto t = std::make_shared<zerograd::Tensor>(
+        data, std::vector<std::size_t>{1, 3, 2, 2}, true);
+
+    auto compute_graph = [&]() {
+        auto flat = zerograd::flatten(t);
+        return zerograd::sum(flat);
+    };
+
+    std::fill(t->grad.begin(), t->grad.end(), 0.0f);
+    auto loss = compute_graph();
+    loss->backward();
+
+    for (std::size_t i = 0; i < t->data.size(); ++i) {
+        float numeric = compute_tensor_numerical_gradient(compute_graph, t, i);
+        REQUIRE(numeric == Catch::Approx(t->grad[i]).epsilon(0.01f));
+    }
+}

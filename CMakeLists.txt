@@ -17,6 +17,7 @@ add_library(zerograd_core
     src/linear.cpp 
     src/sequential.cpp 
     src/optimizer.cpp
+    src/hidden.cpp
     src/data/mnist.cpp
 )
 
@@ -59,6 +60,12 @@ add_executable(train_mnist
 )
 
 target_link_libraries(train_mnist PRIVATE zerograd_core)
+
+add_executable(train_mnist_cnn
+    tools/train_mnist_cnn.cpp
+)
+
+target_link_libraries(train_mnist_cnn PRIVATE zerograd_core)
 
 include(Catch)
 catch_discover_tests(zerograd_tests)

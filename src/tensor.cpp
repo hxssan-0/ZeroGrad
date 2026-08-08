@@ -1126,6 +1126,10 @@ namespace zerograd
             throw std::invalid_argument("maxPool2d requires an input tensor of 4 dimensions.");
         }
 
+        if (padding >= kernel_h || padding >= kernel_w) {
+            throw std::invalid_argument("maxPool2d: padding must be smaller than kernel size.");
+        }
+
         std::size_t N = input->shape[0];
         std::size_t C = input->shape[1];
         std::size_t H_in = input->shape[2];
@@ -1139,9 +1143,9 @@ namespace zerograd
         auto argmax_cache = std::make_shared<std::vector<std::size_t>>(N * C * H_out * W_out, 0);
 
         for (std::size_t n{}; n < N; ++n) {
-            for (std::size_t c{}; n < C; ++c) {
-                for (std::size_t oh{}; h < H_out; ++oh) {
-                    for (std::size_t ow{}; w < W_out; ++ow) {
+            for (std::size_t c{}; c < C; ++c) {
+                for (std::size_t oh{}; oh < H_out; ++oh) {
+                    for (std::size_t ow{}; ow < W_out; ++ow) {
                         float max_val = -std::numeric_limits<float>::infinity();
                         std::size_t max_idx = 0;
                         bool found = false;
@@ -1167,7 +1171,7 @@ namespace zerograd
                         }
 
                         std::size_t out_idx = n * (C * H_out * W_out) + c * (H_out * W_out) + oh * W_out + ow;
-                        out_data[out_idx] = max_val;
+                        result_data[out_idx] = max_val;
                         (*argmax_cache)[out_idx] = max_idx;   
                     }
                 }
@@ -1182,10 +1186,10 @@ namespace zerograd
             "maxpool2d"
         );
 
-        result->_backward = [input, out = result.get(), armgax]() {
+        result->_backward = [input, out = result.get(), argmax_cache]() {
             if (input->requires_grad) {
                 for (std::size_t i{}; i < out->grad.size(); ++i) {
-                    std::size_t winning_idx = (*argmax)[i];
+                    std::size_t winning_idx = (*argmax_cache)[i];
                     input->grad[winning_idx] += out->grad[i];
                 }
             }
