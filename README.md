@@ -34,7 +34,7 @@ cmake --build .
 PYTHONPATH=build/python python3 python/zerograd/train_mnist.py
 ```
 
-## Train (CNNC)
+## Train (CNN)
 
 ```bash
 ./train_mnist_cnn
