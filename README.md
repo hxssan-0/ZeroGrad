@@ -5,7 +5,7 @@ A custom autograd engine and static memory planner built in C++20 from scratch, 
 ## Goals
 
 1. Core autograd engine (`Scalar`/`Tensor`, reverse-mode autodiff) **COMPLETE**
-2. CNN support (Conv2d, BatchNorm, pooling)
+2. CNN support (Conv2d, BatchNorm, pooling) **COMPLETE**
 3. Arena allocator + static memory planner
 4. Benchmarks vs PyTorch + report
 
