@@ -15,11 +15,7 @@ namespace zerograd
     private:
         bool requires_grad{}; // false by default to mimic PyTorch
         std::function<void()> _backward = [](){};
-        std::vector<std::shared_ptr<Tensor>> _children;
         std::string _op;
-
-        std::size_t birth_step;
-        std::size_t ref_count;
 
         static std::vector<std::size_t> compute_broadcast_shape(const std::vector<std::size_t>& shape1, const std::vector<std::size_t>& shape2);
         static std::vector<std::size_t> pad_shape(const std::vector<std::size_t>& shape, std::size_t result_shape_size);
@@ -40,6 +36,10 @@ namespace zerograd
         std::vector<std::size_t> shape;
         std::vector<std::size_t> strides;
         std::vector<float> grad;
+        std::vector<std::shared_ptr<Tensor>> _children;
+
+        std::size_t birth_step;
+        std::size_t ref_count;
 
         static std::size_t calculate_total_elements(const std::vector<std::size_t>& shape);
 

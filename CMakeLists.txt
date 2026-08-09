@@ -19,6 +19,7 @@ add_library(zerograd_core
     src/optimizer.cpp
     src/hidden.cpp
     src/data/mnist.cpp
+    src/graph_analyzer.cpp
 )
 
 set_target_properties(zerograd_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -45,6 +46,7 @@ add_executable(zerograd_tests
     tests/test_integration.cpp
     tests/test_mnist.cpp
     tests/test_data_loader.cpp
+    tests/test_graph_analyzer.cpp
 )
 
 target_link_libraries(zerograd_tests PRIVATE Catch2::Catch2WithMain zerograd_core)
