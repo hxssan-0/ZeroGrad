@@ -1,5 +1,6 @@
 #pragma once
 
+#include "step_counter.h"
 #include <memory>
 #include <vector>
 #include <cstddef>
@@ -16,6 +17,9 @@ namespace zerograd
         std::function<void()> _backward = [](){};
         std::vector<std::shared_ptr<Tensor>> _children;
         std::string _op;
+
+        std::size_t birth_step;
+        std::size_t ref_count;
 
         static std::vector<std::size_t> compute_broadcast_shape(const std::vector<std::size_t>& shape1, const std::vector<std::size_t>& shape2);
         static std::vector<std::size_t> pad_shape(const std::vector<std::size_t>& shape, std::size_t result_shape_size);

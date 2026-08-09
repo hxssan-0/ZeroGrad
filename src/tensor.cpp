@@ -17,7 +17,8 @@ namespace zerograd
         std::string _op
     ) :
     data(std::move(data)), shape(std::move(shape)), grad(this->data.size(), 0.0f), requires_grad(requires_grad), 
-    _children(std::move(_children)), _op(std::move(_op)), strides(this->shape.size(), 0)
+    _children(std::move(_children)), _op(std::move(_op)), strides(this->shape.size(), 0),
+    birth_step(zerograd::global_step_counter()++), ref_count(0)
     {
         if (!this->shape.empty()) {
             strides.back() = 1;
@@ -25,6 +26,10 @@ namespace zerograd
             for (std::size_t i{this->shape.size() - 1}; i > 0; i--) {
                 strides[i - 1] = this->shape[i] * strides[i];
             }
+        }
+
+        for (auto& child: this->_children) {
+            ++child->ref_count;
         }
     }
 
