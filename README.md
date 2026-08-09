@@ -38,4 +38,5 @@ PYTHONPATH=build/python python3 python/zerograd/train_mnist.py
 
 ```bash
 ./train_mnist_cnn
+PYTHONPATH=build/python python3 python/zerograd/train_mnist_cnn.py
 ```
