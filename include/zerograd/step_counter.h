@@ -1,3 +1,5 @@
+#include <cstddef>
+
 namespace zerograd
 {
     inline std::size_t& global_step_counter()
