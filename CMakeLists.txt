@@ -20,6 +20,7 @@ add_library(zerograd_core
     src/hidden.cpp
     src/data/mnist.cpp
     src/graph_analyzer.cpp
+    src/graph_serializer.cpp
 )
 
 set_target_properties(zerograd_core PROPERTIES POSITION_INDEPENDENT_CODE ON)

@@ -8,6 +8,7 @@
 #include <zerograd/activations.hpp>
 #include <zerograd/data/mnist.hpp>
 #include <zerograd/metrics.hpp>
+#include <zerograd/hidden.hpp>
 
 namespace py = pybind11;
 
@@ -77,6 +78,11 @@ PYBIND11_MODULE(_zerograd_backend, m)
 
         m.def("transpose", &zerograd::transpose);
 
+        m.def("batchNorm1d", &zerograd::batchNorm1d);
+        m.def("conv2d", &zerograd::conv2d);
+        m.def("maxPool2d", &zerograd::maxPool2d);
+        m.def("flatten", &zerograd::flatten);
+
         m.def("mse_loss", &zerograd::mse_loss);
         m.def("ce_loss", &zerograd::ce_loss,
             py::arg("logits"), py::arg("target_classes"));
@@ -89,6 +95,25 @@ PYBIND11_MODULE(_zerograd_backend, m)
             .def(py::init<std::size_t, std::size_t>(), py::arg("in_features"), py::arg("out_features"))
             .def("forward", &zerograd::Linear::forward)
             .def("parameters", &zerograd::Linear::parameters);
+
+        // Hidden layer classes
+        py::class_<zerograd::Conv2d, zerograd::Layer, std::shared_ptr<zerograd::Conv2d>>(m, "Conv2d")
+            .def(py::init<std::size_t, std::size_t, std::size_t, std::size_t, std::size_t, std::size_t>(),
+                py::arg("in_channels"), py::arg("out_channels"),
+                py::arg("kernel_h"), py::arg("kernel_w"),
+                py::arg("stride") = 1, py::arg("padding") = 0)
+            .def("forward", &zerograd::Conv2d::forward)
+            .def("parameters", &zerograd::Conv2d::parameters);
+
+        py::class_<zerograd::MaxPool2d, zerograd::Layer, std::shared_ptr<zerograd::MaxPool2d>>(m, "MaxPool2d")
+            .def(py::init<std::size_t, std::size_t, std::size_t, std::size_t>(),
+                py::arg("kernel_h"), py::arg("kernel_w"),
+                py::arg("stride") = 1, py::arg("padding") = 0)
+            .def("forward", &zerograd::MaxPool2d::forward);
+
+        py::class_<zerograd::Flatten, zerograd::Layer, std::shared_ptr<zerograd::Flatten>>(m, "Flatten")
+            .def(py::init<>())
+            .def("forward", &zerograd::Flatten::forward);
 
         // Activations
         py::class_<zerograd::ReLU, zerograd::Layer, std::shared_ptr<zerograd::ReLU>>(m, "ReLU")
