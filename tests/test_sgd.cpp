@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
-#include <zerograd/optimizer.h>
-#include <zerograd/tensor.h>
+#include <zerograd/optimizer.hpp>
+#include <zerograd/tensor.hpp>
 
 TEST_CASE("SGD Optimizer", "[optimizer][sgd]") {
 

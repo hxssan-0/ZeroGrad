@@ -1,9 +1,9 @@
-#include <zerograd/data/mnist.h>
-#include <zerograd/metrics.h>
-#include <zerograd/sequential.h>
-#include <zerograd/linear.h>
-#include <zerograd/activations.h>
-#include <zerograd/optimizer.h>
+#include <zerograd/data/mnist.hpp>
+#include <zerograd/metrics.hpp>
+#include <zerograd/sequential.hpp>
+#include <zerograd/linear.hpp>
+#include <zerograd/activations.hpp>
+#include <zerograd/optimizer.hpp>
 #include <iostream>
 
 int main()

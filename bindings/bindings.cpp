@@ -1,13 +1,13 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-#include <zerograd/tensor.h>
-#include <zerograd/layer.h>
-#include <zerograd/linear.h>
-#include <zerograd/sequential.h>
-#include <zerograd/optimizer.h>
-#include <zerograd/activations.h>
-#include <zerograd/data/mnist.h>
-#include <zerograd/metrics.h>
+#include <zerograd/tensor.hpp>
+#include <zerograd/layer.hpp>
+#include <zerograd/linear.hpp>
+#include <zerograd/sequential.hpp>
+#include <zerograd/optimizer.hpp>
+#include <zerograd/activations.hpp>
+#include <zerograd/data/mnist.hpp>
+#include <zerograd/metrics.hpp>
 
 namespace py = pybind11;
 

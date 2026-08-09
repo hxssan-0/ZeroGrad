@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
-#include <zerograd/scalar.h>
+#include <zerograd/scalar.hpp>
 #include <cmath>
 #include <functional>
 

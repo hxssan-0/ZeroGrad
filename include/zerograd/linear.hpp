@@ -1,7 +1,7 @@
 #pragma once
 
-#include "tensor.h"
-#include "layer.h"
+#include "tensor.hpp"
+#include "layer.hpp"
 #include <memory>
 
 namespace zerograd

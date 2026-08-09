@@ -1,4 +1,4 @@
-#include <zerograd/data/mnist.h>
+#include <zerograd/data/mnist.hpp>
 #include <fstream>
 #include <iostream>
 #include <numeric>

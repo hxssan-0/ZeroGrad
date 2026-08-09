@@ -1,6 +1,6 @@
 #pragma once
 
-#include "step_counter.h"
+#include "step_counter.hpp"
 #include <memory>
 #include <vector>
 #include <cstddef>

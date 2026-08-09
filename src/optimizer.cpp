@@ -1,5 +1,4 @@
-#include <zerograd/optimizer.h>
-
+#include <zerograd/optimizer.hpp>
 #include <algorithm>
 #include <cstddef>
 

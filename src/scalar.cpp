@@ -1,4 +1,4 @@
-#include <zerograd/scalar.h>
+#include <zerograd/scalar.hpp>
 #include <cmath>
 #include <algorithm>
 

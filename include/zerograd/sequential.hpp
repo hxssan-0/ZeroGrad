@@ -1,7 +1,7 @@
 #pragma once
 
-#include "layer.h"
-#include "tensor.h"
+#include "layer.hpp"
+#include "tensor.hpp"
 #include <memory>
 #include <vector>
 

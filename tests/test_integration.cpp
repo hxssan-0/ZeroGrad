@@ -1,9 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
-#include <zerograd/tensor.h>
-#include <zerograd/linear.h>
-#include <zerograd/sequential.h>
-#include <zerograd/optimizer.h>
-#include <zerograd/activations.h>
+#include <zerograd/tensor.hpp>
+#include <zerograd/linear.hpp>
+#include <zerograd/sequential.hpp>
+#include <zerograd/optimizer.hpp>
+#include <zerograd/activations.hpp>
 #include <memory>
 
 TEST_CASE("Training loop check - loss decreases", "[integration]") {

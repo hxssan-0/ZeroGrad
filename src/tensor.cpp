@@ -1,4 +1,4 @@
-#include <zerograd/tensor.h>
+#include <zerograd/tensor.hpp>
 #include <stdexcept>
 #include <algorithm>
 #include <iterator>

@@ -1,4 +1,4 @@
-#include <zerograd/linear.h>
+#include <zerograd/linear.hpp>
 #include <cmath>
 #include <random>
 #include <algorithm>

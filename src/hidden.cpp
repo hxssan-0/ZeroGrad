@@ -1,4 +1,4 @@
-#include <zerograd/hidden.h>
+#include <zerograd/hidden.hpp>
 #include <cmath>
 #include <random>
 #include <algorithm>

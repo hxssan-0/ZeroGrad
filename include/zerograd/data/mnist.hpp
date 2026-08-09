@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../tensor.h"
+#include "../tensor.hpp"
 #include <cstdint>
 #include <vector>
 #include <cstddef>

@@ -1,5 +1,5 @@
-#include <zerograd/sequential.h>
-#include <zerograd/tensor.h>
+#include <zerograd/sequential.hpp>
+#include <zerograd/tensor.hpp>
 
 namespace zerograd
 {

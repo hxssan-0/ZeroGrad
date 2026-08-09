@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <memory>
 #include <iterator>
-#include "tensor.h"
+#include "tensor.hpp"
 
 namespace zerograd::metrics
 {
