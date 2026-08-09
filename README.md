@@ -11,7 +11,7 @@ A custom autograd engine and static memory planner built in C++20 from scratch, 
 
 ## Status
 
-Phase 1 complete : MNIST trained in both C++ ad Python with a 97%+ accuracy.
+Phase 1 complete : MNIST trained in both C++ and Python with a 97%+ accuracy.
 
 ## Build
 
