@@ -9,6 +9,7 @@
 #include <zerograd/data/mnist.hpp>
 #include <zerograd/metrics.hpp>
 #include <zerograd/hidden.hpp>
+#include <zerograd/graph_analyzer.hpp>
 
 namespace py = pybind11;
 
@@ -36,6 +37,8 @@ PYBIND11_MODULE(_zerograd_backend, m)
         .def_readwrite("shape", &zerograd::Tensor::shape)
         .def_readwrite("strides", &zerograd::Tensor::strides)
         .def_readwrite("grad", &zerograd::Tensor::grad)
+        .def_readonly("op", &zerograd::Tensor::_op)
+        .def_readonly("birth_step", &zerograd::Tensor::birth_step)
 
         .def("requires_grad", &zerograd::Tensor::get_requires_grad)
 
@@ -160,4 +163,9 @@ PYBIND11_MODULE(_zerograd_backend, m)
 
         m.def("count_correct", &zerograd::metrics::count_correct,
             py::arg("logits"), py::arg("targets"));
+
+        // Graph Analyzer
+        py::class_<zerograd::GraphAnalyzer>(m, "GraphAnalyzer")
+            .def(py::init<>())
+            .def("dry_forward", &zerograd::GraphAnalyzer::dry_forward);
 }
