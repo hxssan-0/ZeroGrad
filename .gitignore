@@ -1,6 +1,7 @@
 build/
 build-*/
 CMakeCache.txt
+pending.txt
 CMakeFiles/
 CMakeScripts/
 Makefile

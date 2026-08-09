@@ -72,6 +72,16 @@ namespace zerograd
         return result_shape;
     }
 
+    std::vector<std::shared_ptr<Tensor>> Tensor::get_topo_order(const std::shared_ptr<Tensor>& node)
+    {
+        std::vector<std::shared_ptr<Tensor>> topo;
+        std::unordered_set<std::shared_ptr<Tensor>> visited;
+
+        build_topo(node, topo, visited);
+
+        return topo;
+    }
+
     std::vector<std::size_t> Tensor::pad_shape(const std::vector<std::size_t>& shape, std::size_t result_shape_size)
     {
         std::vector<std::size_t> shape_padded(result_shape_size, 1);
@@ -1347,16 +1357,16 @@ namespace zerograd
             throw std::runtime_error("backward can only be called on scalar tensors");
         }
 
-        std::vector<std::shared_ptr<Tensor>> topo;
-        std::unordered_set<std::shared_ptr<Tensor>> visited;
-
-        build_topo(shared_from_this(), topo, visited);
+        std::vector<std::shared_ptr<Tensor>> topo = get_topo_order(shared_from_this());
 
         if (this->requires_grad)
             this->grad[0] = 1.0f;
 
         for (auto it = topo.rbegin(); it != topo.rend(); ++it) {
             (*it)->_backward();
+            for (auto& child : (*it)->_children) {
+                --child->ref_count;
+            }
         }
     }
 

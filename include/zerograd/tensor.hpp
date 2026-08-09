@@ -43,6 +43,8 @@ namespace zerograd
 
         static std::size_t calculate_total_elements(const std::vector<std::size_t>& shape);
 
+        static std::vector<std::shared_ptr<Tensor>> get_topo_order(const std::shared_ptr<Tensor>& node);
+
         explicit Tensor(
             std::vector<float> data,
             std::vector<std::size_t> shape,
