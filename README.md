@@ -1,6 +1,14 @@
 # ZeroGrad
 
 <p align="center">
+  <img src="https://skillicons.dev/icons?i=cpp,python,cmake" />
+  <img src="https://img.shields.io/badge/pybind11-Bindings-FFB13B?style=for-the-badge">
+  <img src="https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white">
+  <img src="https://img.shields.io/badge/Valgrind-000000?style=for-the-badge">
+  <img src="https://img.shields.io/badge/Catch2-Testing-green?style=for-the-badge">
+</p>
+
+<p align="center">
 A static memory planner and autograd engine written from scratch in <b>C++20</b> with Python bindings via <b>pybind11</b>.
 </p>
 
@@ -142,23 +150,12 @@ via `_zerograd_backend`.
 
 ### Core Dependencies
 
-<p align="left">
-  <img src="https://skillicons.dev/icons?i=cpp,python,cmake" />
-  <img src="https://img.shields.io/badge/pybind11-Bindings-FFB13B?style=for-the-badge">
-</p>
-
 - **C++20** compatible compiler
 - **Python 3.8+**
 - **CMake 3.18+**
 - **pybind11**
 
 ### Development & Benchmarking
-
-<p align="left">
-  <img src="https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white">
-  <img src="https://img.shields.io/badge/Valgrind-000000?style=for-the-badge">
-  <img src="https://img.shields.io/badge/Catch2-Testing-green?style=for-the-badge">
-</p>
 
 - **Catch2**: C++ unit testing framework
 - **PyTorch**: baseline implementation for performance comparison
