@@ -48,6 +48,7 @@ add_executable(zerograd_tests
     tests/test_mnist.cpp
     tests/test_data_loader.cpp
     tests/test_graph_analyzer.cpp
+    tests/test_graph_serializer.cpp
 )
 
 target_link_libraries(zerograd_tests PRIVATE Catch2::Catch2WithMain zerograd_core)

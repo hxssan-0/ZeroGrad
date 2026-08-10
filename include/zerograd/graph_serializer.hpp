@@ -1,17 +1,25 @@
 #pragma once
 
 #include "tensor.hpp"
-#include <unordered_map>
+#include <unordered_set>
 #include <string>
-#include <tuple>
+#include <memory>
 
 namespace zerograd
 {
     class GraphSerializer
-    {
-        void export_graph_to_json(
-            const std::unordered_map<std::shared_ptr<Tensor>, std::tuple<std::size_t, std::size_t, std::size_t>>& intervals,
-            std::string filename = "intervals.json"
+    {  
+    private:
+        static bool has_cycle_dfs(
+            const std::shared_ptr<Tensor>& node,
+            std::unordered_set<std::shared_ptr<Tensor>>& gray,
+            std::unordered_set<std::shared_ptr<Tensor>>& black
         );
+
+        static std::string escape_json_string(const std::string& s);
+    public:
+        static void serialize(const std::shared_ptr<Tensor>& root, const std::string& output_path);
+
+        static bool validate_dag(const std::shared_ptr<Tensor>& root);
     };
 }
