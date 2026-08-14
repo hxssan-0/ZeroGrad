@@ -1973,3 +1973,128 @@ TEST_CASE("flatten gradient check") {
         REQUIRE(numeric == Catch::Approx(t->grad[i]).epsilon(0.01f));
     }
 }
+
+TEST_CASE("Tensor: data-arena-backed tensor produces correct forward values") {
+    zerograd::Arena data_arena(4096);
+
+    auto x = std::make_shared<zerograd::Tensor>(
+        std::vector<float>{1.0f, 2.0f, 3.0f},
+        std::vector<std::size_t>{3},
+        true,
+        std::vector<std::shared_ptr<zerograd::Tensor>>{},
+        "",
+        &data_arena,
+        nullptr
+    );
+
+    REQUIRE(x->data[0] == 1.0f);
+    REQUIRE(x->data[1] == 2.0f);
+    REQUIRE(x->data[2] == 3.0f);
+    REQUIRE(x->shape[0] == 3);
+    REQUIRE(x->strides[0] == 1);
+}
+
+TEST_CASE("Tensor: data+grad both arena-backed, forward and backward correct against exp") {
+    zerograd::Arena data_arena(4096);
+    zerograd::Arena grad_arena(4096);
+
+    auto x = std::make_shared<zerograd::Tensor>(
+        std::vector<float>{0.5f, 1.5f, 2.5f},
+        std::vector<std::size_t>{3},
+        true,
+        std::vector<std::shared_ptr<zerograd::Tensor>>{},
+        "",
+        &data_arena,
+        &grad_arena
+    );
+
+    auto y = zerograd::exp(x);
+    auto z = zerograd::sum(y);
+    z->backward();
+
+    for (std::size_t i = 0; i < x->data.size(); ++i) {
+        float expected = std::exp(x->data[i]);
+        REQUIRE(std::abs(y->data[i] - expected) < 1e-5f);
+        REQUIRE(std::abs(x->grad[i] - expected) < 1e-4f);
+    }
+}
+
+TEST_CASE("Tensor: grad arena-backed independently of data") {
+    zerograd::Arena grad_arena(4096);
+
+    auto x = std::make_shared<zerograd::Tensor>(
+        std::vector<float>{2.0f}, std::vector<std::size_t>{1}, true,
+        std::vector<std::shared_ptr<zerograd::Tensor>>{}, "",
+        nullptr, &grad_arena
+    );
+
+    auto y = zerograd::exp(x);
+    auto z = zerograd::sum(y);
+    z->backward();
+
+    REQUIRE(std::abs(x->grad[0] - std::exp(2.0f)) < 1e-4f);
+}
+
+TEST_CASE("Tensor: arena-backed tensor matches an identical heap-backed tensor's gradient") {
+    zerograd::Arena data_arena(4096);
+    zerograd::Arena grad_arena(4096);
+
+    std::vector<float> values{1.0f, -0.5f, 3.0f, 0.25f};
+
+    auto x_heap = std::make_shared<zerograd::Tensor>(
+        values, std::vector<std::size_t>{4}, true);
+
+    auto x_arena = std::make_shared<zerograd::Tensor>(
+        values, std::vector<std::size_t>{4}, true,
+        std::vector<std::shared_ptr<zerograd::Tensor>>{}, "",
+        &data_arena, &grad_arena);
+
+    auto loss_heap  = zerograd::sum(zerograd::exp(x_heap));
+    auto loss_arena = zerograd::sum(zerograd::exp(x_arena));
+    loss_heap->backward();
+    loss_arena->backward();
+
+    REQUIRE(loss_heap->data[0] == Catch::Approx(loss_arena->data[0]));
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        REQUIRE(x_heap->grad[i] == Catch::Approx(x_arena->grad[i]));
+    }
+}
+
+TEST_CASE("Tensor: multiple tensors packed into the same arena don't corrupt each other") {
+    zerograd::Arena data_arena(4096);
+
+    auto a = std::make_shared<zerograd::Tensor>(
+        std::vector<float>{1.0f, 2.0f}, std::vector<std::size_t>{2}, true,
+        std::vector<std::shared_ptr<zerograd::Tensor>>{}, "", &data_arena, nullptr);
+
+    auto b = std::make_shared<zerograd::Tensor>(
+        std::vector<float>{9.0f, 9.0f, 9.0f}, std::vector<std::size_t>{3}, true,
+        std::vector<std::shared_ptr<zerograd::Tensor>>{}, "", &data_arena, nullptr);
+
+    REQUIRE(a->data[0] == 1.0f);
+    REQUIRE(a->data[1] == 2.0f);
+    REQUIRE(b->data[0] == 9.0f);
+    REQUIRE(b->data[1] == 9.0f);
+    REQUIRE(b->data[2] == 9.0f);
+}
+
+TEST_CASE("Tensor: arena-backed conv2d W_col construction still compiles and reads correctly") {
+    zerograd::Arena data_arena(4096);
+
+    auto weight = std::make_shared<zerograd::Tensor>(
+        std::vector<float>(8 * 1 * 3 * 3, 0.1f),
+        std::vector<std::size_t>{8, 1, 3, 3},
+        true, std::vector<std::shared_ptr<zerograd::Tensor>>{}, "",
+        &data_arena, nullptr
+    );
+
+    auto bias = std::make_shared<zerograd::Tensor>(
+        std::vector<float>(8, 0.0f), std::vector<std::size_t>{8}, true);
+
+    auto input = std::make_shared<zerograd::Tensor>(
+        std::vector<float>(1 * 1 * 5 * 5, 1.0f), std::vector<std::size_t>{1, 1, 5, 5}, true);
+
+    auto out = zerograd::conv2d(input, weight, bias, 1, 1);
+    REQUIRE(out->shape[0] == 1);
+    REQUIRE(out->shape[1] == 8);
+}
