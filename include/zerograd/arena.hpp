@@ -36,4 +36,17 @@ namespace zerograd
 
         void reset();
     };
+
+    class ScopedArena
+    {
+    private:
+        Arena& arena;
+
+    public:
+        explicit ScopedArena(Arena& arena_) : arena(arena_) {}
+        ~ScopedArena() { arena.reset(); }
+
+        ScopedArena(const ScopedArena&) = delete;
+        ScopedArena operator=(const ScopedArena&) = delete;
+    };
 }

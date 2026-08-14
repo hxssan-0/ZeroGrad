@@ -2098,3 +2098,46 @@ TEST_CASE("Tensor: arena-backed conv2d W_col construction still compiles and rea
     REQUIRE(out->shape[0] == 1);
     REQUIRE(out->shape[1] == 8);
 }
+
+TEST_CASE("ScopedArena: resetting an ephemeral arena does not touch a separate persistent arena") {
+    zerograd::Arena param_arena(4096);
+    zerograd::Arena step_arena(4096);
+
+    float* param_data = static_cast<float*>(param_arena.alloc(4 * sizeof(float), alignof(float)));
+    float* param_grad = static_cast<float*>(param_arena.alloc(4 * sizeof(float), alignof(float)));
+    param_data[0] = 1.5f; param_data[1] = 2.5f; param_data[2] = -0.5f; param_data[3] = 3.0f;
+    param_grad[0] = 0.1f; param_grad[1] = 0.2f; param_grad[2] = 0.3f; param_grad[3] = 0.4f;
+
+    for (int step = 0; step < 5; ++step) {
+        zerograd::ScopedArena guard(step_arena);
+
+        float* activation = static_cast<float*>(step_arena.alloc(16 * sizeof(float), alignof(float)));
+        for (int i = 0; i < 16; ++i) activation[i] = static_cast<float>(step * 100 + i);
+
+    }
+
+    REQUIRE(param_data[0] == 1.5f);
+    REQUIRE(param_data[1] == 2.5f);
+    REQUIRE(param_data[2] == -0.5f);
+    REQUIRE(param_data[3] == 3.0f);
+    REQUIRE(param_grad[0] == 0.1f);
+    REQUIRE(param_grad[1] == 0.2f);
+    REQUIRE(param_grad[2] == 0.3f);
+    REQUIRE(param_grad[3] == 0.4f);
+}
+
+TEST_CASE("ScopedArena: ephemeral arena is actually clean after reset, not just rewound") {
+    zerograd::Arena step_arena(4096);
+
+    {
+        zerograd::ScopedArena guard(step_arena);
+        float* p = static_cast<float*>(step_arena.alloc(4 * sizeof(float), alignof(float)));
+        p[0] = 99.0f; p[1] = 99.0f; p[2] = 99.0f; p[3] = 99.0f;
+    }
+
+    float* q = static_cast<float*>(step_arena.alloc(4 * sizeof(float), alignof(float)));
+    REQUIRE(q[0] == 0.0f);
+    REQUIRE(q[1] == 0.0f);
+    REQUIRE(q[2] == 0.0f);
+    REQUIRE(q[3] == 0.0f);
+}
