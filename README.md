@@ -20,7 +20,7 @@ ZeroGrad is a deep learning framework that eliminates runtime memory allocation 
 
 Instead of relying on dynamic allocation or runtime caching allocators, ZeroGrad performs **offline computational graph analysis** to determine tensor lifetimes, allowing physical memory to be reused inside a single preallocated arena.
 
-This enables deterministic memory layouts with **zero runtime heap allocations** during training.
+This enables deterministic memory layouts with **minimal runtime heap allocations** during training.
 
 ---
 
