@@ -1,12 +1,15 @@
 #pragma once
 
 #include "step_counter.hpp"
+#include "arena.hpp"
+#include "arena_storage.hpp"
 #include <memory>
 #include <vector>
 #include <cstddef>
 #include <functional>
 #include <string>
 #include <unordered_set>
+#include <span>
 
 namespace zerograd
 {
@@ -16,11 +19,11 @@ namespace zerograd
         bool requires_grad{}; // false by default to mimic PyTorch
         std::function<void()> _backward = [](){};
 
-        static std::vector<std::size_t> compute_broadcast_shape(const std::vector<std::size_t>& shape1, const std::vector<std::size_t>& shape2);
-        static std::vector<std::size_t> pad_shape(const std::vector<std::size_t>& shape, std::size_t result_shape_size);
-        static std::vector<std::size_t> compute_padded_strides(const std::vector<std::size_t>& strides, std::size_t result_shape_size, const std::vector<std::size_t>& shape_padded);
-        static std::vector<std::size_t> convert_flat_to_multi_index(std::size_t flat_idx, const std::vector<std::size_t>& shape);
-        static std::size_t convert_multi_to_flat_index(const std::vector<std::size_t>& multi_idx, const std::vector<std::size_t>& strides);
+        static std::vector<std::size_t> compute_broadcast_shape(std::span<const std::size_t> shape1, std::span<const std::size_t> shape2);
+        static std::vector<std::size_t> pad_shape(std::span<const std::size_t> shape, std::size_t result_shape_size);
+        static std::vector<std::size_t> compute_padded_strides(std::span<const std::size_t> strides, std::size_t result_shape_size, std::span<const std::size_t> shape_padded);
+        static std::vector<std::size_t> convert_flat_to_multi_index(std::size_t flat_idx, std::span<const std::size_t> shape);
+        static std::size_t convert_multi_to_flat_index(std::span<const std::size_t> multi_idx, std::span<const std::size_t> strides);
 
         static float compute_sigmoid(float x);
 
@@ -30,18 +33,33 @@ namespace zerograd
             std::unordered_set<std::shared_ptr<Tensor>>& visited
         );
 
+        template <typename T>
+        ArenaStorage<T> make_storage(const std::vector<T>& src, Arena* arena)
+        {
+            if (arena) {
+                T* ptr = static_cast<T*>(arena->alloc(src.size() * sizeof(T), alignof(T)));
+                std::copy(src.begin(), src.end(), ptr);
+                return ArenaStorage<T>(ptr, src.size());
+            }
+            return ArenaStorage<T>(std::move(src));
+        }
+
+        static TensorStorage make_zero_storage(std::size_t count, Arena* arena);
+
     public:
-        std::vector<float> data;
-        std::vector<std::size_t> shape;
-        std::vector<std::size_t> strides;
-        std::vector<float> grad;
+        TensorStorage data;
+        ShapeStorage shape;
+        ShapeStorage strides;
+        TensorStorage grad;
         std::vector<std::shared_ptr<Tensor>> _children;
         std::string _op;
 
         std::size_t birth_step;
         std::size_t ref_count;
 
-        static std::size_t calculate_total_elements(const std::vector<std::size_t>& shape);
+        void reshape(const std::vector<std::size_t>& new_shape);
+
+        static std::size_t calculate_total_elements(std::span<const std::size_t> shape);
 
         static std::vector<std::shared_ptr<Tensor>> get_topo_order(const std::shared_ptr<Tensor>& node);
 
@@ -50,7 +68,9 @@ namespace zerograd
             std::vector<std::size_t> shape,
             bool requires_grad = false,
             std::vector<std::shared_ptr<Tensor>> _children = {},
-            std::string _op = ""
+            std::string _op = "",
+            Arena* data_arena = nullptr,
+            Arena* grad_arena = nullptr
         );
 
         bool get_requires_grad() const;

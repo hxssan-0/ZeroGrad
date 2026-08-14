@@ -63,7 +63,7 @@ TEST_CASE("GraphAnalyzer: single node with no children still gets a valid interv
     REQUIRE(death > birth);
 }
 
-TEST_CASE("GraphAnalyzer: size_bytes matches tensor data size") {
+TEST_CASE("GraphAnalyzer: size_bytes matches total arena footprint (data, grad, shape, strides)") {
     auto x = std::make_shared<zerograd::Tensor>(
         std::vector<float>(20, 1.0f), std::vector<std::size_t>{4, 5}, true);
     auto y = zerograd::exp(x);
@@ -74,8 +74,13 @@ TEST_CASE("GraphAnalyzer: size_bytes matches tensor data size") {
     auto [x_birth, x_death, x_size] = result[x];
     auto [y_birth, y_death, y_size] = result[y];
 
-    REQUIRE(x_size == 20 * sizeof(float));
-    REQUIRE(y_size == 20 * sizeof(float));
+    std::size_t expected_data_grad = 20 * sizeof(float) * 2;
+    std::size_t expected_shape = 2 * sizeof(std::size_t); 
+    std::size_t expected_strides = 2 * sizeof(std::size_t);
+    std::size_t expected_total = expected_data_grad + expected_shape + expected_strides;
+
+    REQUIRE(x_size == expected_total);
+    REQUIRE(y_size == expected_total);
 }
 
 TEST_CASE("GraphAnalyzer: dry_forward does not mutate real ref_count") {

@@ -1,4 +1,7 @@
-#include "tensor.hpp"
+#pragma once
+
+#include <cstdint>
+#include <stdexcept>
 
 namespace zerograd
 {
@@ -7,6 +10,7 @@ namespace zerograd
     private:
         uint8_t* buffer = nullptr;
         std::size_t buffer_length = 0;
+        std::size_t cursor = 0;
     
     public:
         explicit Arena(std::size_t total_bytes);
@@ -17,6 +21,8 @@ namespace zerograd
 
         Arena(Arena&&) noexcept;
         Arena& operator=(Arena&&) noexcept;
+
+        void* alloc(std::size_t size, std::size_t align = alignof(std::max_align_t));
 
         template <typename T>
         T* get_ptr(std::size_t offset_bytes) const

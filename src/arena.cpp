@@ -38,6 +38,7 @@ namespace zerograd
     void Arena::reset()
     {
         std::memset(buffer, 0, buffer_length);
+        cursor = 0;
     }
 
     Arena::Arena(Arena&& other) noexcept : buffer(other.buffer), buffer_length(other.buffer_length)
@@ -62,5 +63,19 @@ namespace zerograd
         }
 
         return *this;
+    }
+
+    void* Arena::alloc(std::size_t size, std::size_t align)
+    {
+        std::size_t current = reinterpret_cast<std::size_t>(buffer) + cursor;
+        std::size_t aligned = (current + align - 1) & ~(align - 1);
+        std::size_t new_cursor = (aligned - reinterpret_cast<std::size_t>(buffer)) + size;
+
+        if (new_cursor > buffer_length) {
+            throw std::out_of_range("Arena::alloc: out of capacity");
+        }
+
+        cursor = new_cursor;
+        return reinterpret_cast<void*>(aligned);
     }
 }

@@ -188,6 +188,7 @@ cmake --build . -j$(nproc)
 # Tests
 
 ```bash
+cd build
 ./zerograd_tests
 ```
 
@@ -200,13 +201,15 @@ cmake --build . -j$(nproc)
 ### C++
 
 ```bash
+cd build
 ./train_mnist
 ```
 
 ### Python
 
 ```bash
-PYTHONPATH=build/python python3 python/zerograd/train_mnist.py
+cd python/zerograd
+PYTHONPATH=../../build/python python3 python/zerograd/train_mnist.py
 ```
 
 ---
@@ -216,13 +219,15 @@ PYTHONPATH=build/python python3 python/zerograd/train_mnist.py
 ### C++
 
 ```bash
+cd build
 ./train_mnist_cnn
 ```
 
 ### Python
 
 ```bash
-PYTHONPATH=build/python python3 python/zerograd/train_mnist_cnn.py
+cd python/zerograd
+PYTHONPATH=../../build/python python3 python/zerograd/train_mnist_cnn.py
 ```
 
 ---

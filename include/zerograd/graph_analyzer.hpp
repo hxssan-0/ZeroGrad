@@ -1,3 +1,5 @@
+#pragma once
+
 #include "tensor.hpp"
 #include <tuple>
 #include <map>

@@ -10,12 +10,18 @@
 #include <zerograd/metrics.hpp>
 #include <zerograd/hidden.hpp>
 #include <zerograd/graph_analyzer.hpp>
+#include <zerograd/arena.hpp>
 
 namespace py = pybind11;
 
 PYBIND11_MODULE(_zerograd_backend, m)
 {
     m.doc() = "ZeroGrad C++ Backend";
+
+    // Arena class
+    py::class_<zerograd::Arena>(m, "Arena")
+        .def(py::init<std::size_t>(), py::arg("total_bytes"))
+        .def("reset", &zerograd::Arena::reset);
 
     // Tensor class
     py::class_<zerograd::Tensor, std::shared_ptr<zerograd::Tensor>>(m, "Tensor")
@@ -24,19 +30,34 @@ PYBIND11_MODULE(_zerograd_backend, m)
                 std::vector<std::size_t>,
                 bool,
                 std::vector<std::shared_ptr<zerograd::Tensor>>,
-                std::string
+                std::string,
+                zerograd::Arena*,
+                zerograd::Arena*
                 >(),
             py::arg("data"),
             py::arg("shape"),
             py::arg("requires_grad") = false,
             py::arg("children") = std::vector<std::shared_ptr<zerograd::Tensor>>{},
-            py::arg("op") = ""
+            py::arg("op") = "",
+            py::arg("data_arena") = static_cast<zerograd::Arena*>(nullptr),
+            py::arg("grad_arena") = static_cast<zerograd::Arena*>(nullptr)
         )
 
-        .def_readwrite("data", &zerograd::Tensor::data)
-        .def_readwrite("shape", &zerograd::Tensor::shape)
-        .def_readwrite("strides", &zerograd::Tensor::strides)
-        .def_readwrite("grad", &zerograd::Tensor::grad)
+        .def_property("data", [](const zerograd::Tensor& t) { return std::vector<float>(t.data.begin(), t.data.end()); },
+            [](zerograd::Tensor& t, const std::vector<float>& v) { std::copy(v.begin(), v.end(), t.data.begin()); })
+        .def_property("shape",
+            [](const zerograd::Tensor& t) { 
+                return std::vector<std::size_t>(t.shape.begin(), t.shape.end()); 
+            },
+            [](zerograd::Tensor& t, const std::vector<std::size_t>& new_shape) {
+                t.shape = zerograd::ShapeStorage(new_shape);
+            }
+        )
+        .def_property_readonly("strides",
+            [](const zerograd::Tensor& t) { return std::vector<std::size_t>(t.strides.begin(), t.strides.end()); })
+        .def_property("grad",
+            [](const zerograd::Tensor& t) { return std::vector<float>(t.grad.begin(), t.grad.end()); },
+            [](zerograd::Tensor& t, const std::vector<float>& v) { std::copy(v.begin(), v.end(), t.grad.begin()); })
         .def_readonly("op", &zerograd::Tensor::_op)
         .def_readonly("birth_step", &zerograd::Tensor::birth_step)
 

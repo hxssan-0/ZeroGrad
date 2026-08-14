@@ -22,8 +22,13 @@ namespace zerograd
         std::size_t sim_step = max_birth + 1;
         std::size_t max_possible_death = sim_step + topo.size();
         for (auto& t : topo) {
-            std::size_t size_bytes = t->data.size() * sizeof(float);
-            result[t] = {t->birth_step, max_possible_death, size_bytes};
+            std::size_t data_grad_bytes = t->data.size() * sizeof(float) * 2;
+            
+            std::size_t shape_bytes = t->shape.size() * sizeof(std::size_t);
+            std::size_t stride_bytes = t->strides.size() * sizeof(std::size_t);
+            
+            std::size_t total_bytes = data_grad_bytes + shape_bytes + stride_bytes;
+            result[t] = {t->birth_step, max_possible_death, total_bytes};
         }
 
         bool is_root = true;

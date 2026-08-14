@@ -8,10 +8,10 @@
 
 namespace zerograd::metrics
 {
-    inline std::size_t argmax(std::vector<float>::const_iterator begin, std::vector<float>::const_iterator end)
+    template <typename Iterator>
+    inline std::size_t argmax(Iterator begin, Iterator end)
     {
-        auto max_it = std::max_element(begin, end);
-        return std::distance(begin, max_it);
+        return std::distance(begin, std::max_element(begin, end));
     }
 
     inline std::size_t argmax(const std::vector<float>& vec)

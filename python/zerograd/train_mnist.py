@@ -23,7 +23,7 @@ lr = 1e-1
 optimizer = zg.Optimizer(mlp.parameters(), lr)
 
 print("====== BEGINNING TRAINING LOOP ======")
-NUM_EPOCHS = 15
+NUM_EPOCHS = 1
 
 for epoch in range(NUM_EPOCHS):
     running_loss = 0.0

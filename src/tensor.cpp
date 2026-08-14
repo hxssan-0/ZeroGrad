@@ -1,4 +1,5 @@
 #include <zerograd/tensor.hpp>
+#include <zerograd/arena_storage.hpp>
 #include <stdexcept>
 #include <algorithm>
 #include <iterator>
@@ -14,26 +15,52 @@ namespace zerograd
         std::vector<std::size_t> shape,
         bool requires_grad,
         std::vector<std::shared_ptr<Tensor>> _children,
-        std::string _op
+        std::string _op,
+        Arena* data_arena,
+        Arena* grad_arena
     ) :
-    data(std::move(data)), shape(std::move(shape)), grad(this->data.size(), 0.0f), requires_grad(requires_grad), 
-    _children(std::move(_children)), _op(std::move(_op)), strides(this->shape.size(), 0),
+    data(make_storage(data, data_arena)), 
+    shape(make_storage(shape, data_arena)), 
+    grad(make_zero_storage(this->data.size(), grad_arena)),
+    requires_grad(requires_grad), _children(std::move(_children)), _op(std::move(_op)), 
+    strides(make_storage(std::vector<std::size_t>(this->shape.size(), 0), data_arena)), 
     birth_step(zerograd::global_step_counter()++), ref_count(0)
     {
-        if (!this->shape.empty()) {
-            strides.back() = 1;
-
+        if (this->shape.size() > 0) {
+            strides[strides.size() - 1] = 1;
             for (std::size_t i{this->shape.size() - 1}; i > 0; i--) {
                 strides[i - 1] = this->shape[i] * strides[i];
             }
         }
 
-        for (auto& child: this->_children) {
+        for (auto& child : this->_children) {
             ++child->ref_count;
         }
     }
 
-    std::vector<std::size_t> Tensor::compute_broadcast_shape(const std::vector<std::size_t>& shape1, const std::vector<std::size_t>& shape2)
+    void Tensor::reshape(const std::vector<std::size_t>& new_shape) {
+        this->shape = zerograd::ShapeStorage(new_shape);
+
+        std::vector<std::size_t> new_strides(new_shape.size());
+        std::size_t current_stride = 1;
+        for (int i = new_shape.size() - 1; i >= 0; --i) {
+            new_strides[i] = current_stride;
+            current_stride *= new_shape[i];
+        }
+        this->strides = zerograd::ShapeStorage(new_strides);
+    }
+
+    TensorStorage Tensor::make_zero_storage(std::size_t count, Arena* arena)
+    {
+        if (arena) {
+            float* ptr = static_cast<float*>(arena->alloc(count * sizeof(float), alignof(float)));
+            std::fill(ptr, ptr + count, 0.0f);
+            return TensorStorage(ptr, count);
+        }
+        return TensorStorage(std::vector<float>(count, 0.0f));
+    }
+
+    std::vector<std::size_t> Tensor::compute_broadcast_shape(std::span<const std::size_t> shape1, std::span<const std::size_t> shape2)
     {
         auto left_shape_it {shape1.rbegin()}, right_shape_it {shape2.rbegin()};
         std::vector<std::size_t> result_shape;
@@ -82,7 +109,7 @@ namespace zerograd
         return topo;
     }
 
-    std::vector<std::size_t> Tensor::pad_shape(const std::vector<std::size_t>& shape, std::size_t result_shape_size)
+    std::vector<std::size_t> Tensor::pad_shape(std::span<const std::size_t> shape, std::size_t result_shape_size)
     {
         std::vector<std::size_t> shape_padded(result_shape_size, 1);
 
@@ -95,7 +122,7 @@ namespace zerograd
         return shape_padded;
     }
 
-    std::vector<std::size_t> Tensor::compute_padded_strides(const std::vector<std::size_t>& strides, std::size_t result_shape_size, const std::vector<std::size_t>& shape_padded)
+    std::vector<std::size_t> Tensor::compute_padded_strides(std::span<const std::size_t> strides, std::size_t result_shape_size, std::span<const std::size_t> shape_padded)
     {
         std::vector<std::size_t> strides_padded(result_shape_size, 0);
 
@@ -110,7 +137,7 @@ namespace zerograd
         return strides_padded;
     }
 
-    std::vector<std::size_t> Tensor::convert_flat_to_multi_index(std::size_t flat_idx, const std::vector<std::size_t>& shape)
+    std::vector<std::size_t> Tensor::convert_flat_to_multi_index(std::size_t flat_idx, std::span<const std::size_t> shape)
     {
         std::vector<std::size_t> multi_idx(shape.size());
 
@@ -122,7 +149,7 @@ namespace zerograd
         return multi_idx;
     }
     
-    std::size_t Tensor::convert_multi_to_flat_index(const std::vector<std::size_t>& multi_idx, const std::vector<std::size_t>& strides)
+    std::size_t Tensor::convert_multi_to_flat_index(std::span<const std::size_t> multi_idx, std::span<const std::size_t> strides)
     {
         std::size_t flat_idx = 0;
 
@@ -133,7 +160,7 @@ namespace zerograd
         return flat_idx;
     }
 
-    std::size_t Tensor::calculate_total_elements(const std::vector<std::size_t>& shape)
+    std::size_t Tensor::calculate_total_elements(std::span<const std::size_t> shape)
     {
         std::size_t total_elements = 1;
 

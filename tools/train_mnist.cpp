@@ -31,7 +31,7 @@ int main()
 
     // TRAINING LOOP
     std::cout << "====== BEGINNING TRAINING LOOP ======\n";
-    constexpr int NUM_EPOCHS = 15;
+    constexpr int NUM_EPOCHS = 1;
     for (int epoch{}; epoch < NUM_EPOCHS; ++epoch) {
         float running_loss{};
         std::cout << "========= EPOCH #" << epoch+1 << " =============\n"; 

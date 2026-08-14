@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <zerograd/arena.hpp>
 #include <random>
+#include <unistd.h>
 
 TEST_CASE("Arena: 1000 objects of varying sizes do not overlap", "[arena]") {
     zerograd::Arena arena(1'000'000);

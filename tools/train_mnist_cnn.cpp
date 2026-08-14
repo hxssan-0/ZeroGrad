@@ -39,7 +39,7 @@ int main()
 
     // TRAINING LOOP
     std::cout << "====== BEGINNING TRAINING LOOP ======\n";
-    constexpr int NUM_EPOCHS = 10;
+    constexpr int NUM_EPOCHS = 1;
     for (int epoch{}; epoch < NUM_EPOCHS; ++epoch) {
         float running_loss{};
         std::cout << "========= EPOCH #" << epoch+1 << " =============\n"; 
@@ -48,7 +48,7 @@ int main()
         int num_batches = 0;
         while (train_loader.has_next()) {
             std::pair<std::shared_ptr<zerograd::Tensor>, std::vector<std::size_t>> batch = train_loader.next_batch();
-            batch.first->shape = {batch.first->shape[0], 1, 28, 28};
+            batch.first->reshape({batch.first->shape[0], 1, 28, 28});
             optimizer.zero_grad();
             std::shared_ptr<zerograd::Tensor> logits = cnn.forward(batch.first);
             std::shared_ptr<zerograd::Tensor> loss = ce_loss(logits, batch.second);
@@ -75,7 +75,7 @@ int main()
 
     while (test_loader.has_next()) {
         std::pair<std::shared_ptr<zerograd::Tensor>, std::vector<std::size_t>> batch = test_loader.next_batch();
-        batch.first->shape = {batch.first->shape[0], 1, 28, 28};
+        batch.first->reshape({batch.first->shape[0], 1, 28, 28});
         std::shared_ptr<zerograd::Tensor> logits = cnn.forward(batch.first);
         total_correct += zerograd::metrics::count_correct(logits, batch.second);
         total_samples += batch.second.size();
