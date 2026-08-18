@@ -22,6 +22,7 @@ add_library(zerograd_core
     src/graph_analyzer.cpp
     src/graph_serializer.cpp
     src/arena.cpp
+    src/memory_planner.cpp
 )
 
 set_target_properties(zerograd_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -51,6 +52,7 @@ add_executable(zerograd_tests
     tests/test_graph_analyzer.cpp
     tests/test_graph_serializer.cpp
     tests/test_arena.cpp
+    tests/test_memory_planner.cpp
 )
 
 target_link_libraries(zerograd_tests PRIVATE Catch2::Catch2WithMain zerograd_core)
